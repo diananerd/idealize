@@ -7,6 +7,12 @@ set -euo pipefail
 VERSION="0.1.0"
 IDEALYZE_HOME="${HOME}/.idealyze"
 SESSION_FILE="${IDEALYZE_HOME}/session.json"
+DEBUG_LOG="${IDEALYZE_HOME}/debug.log"
+
+# Debug helper — set IDEALYZE_DEBUG=1 to enable logging to ~/.idealyze/debug.log
+debug() {
+    [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && mkdir -p "$IDEALYZE_HOME" && echo "[main  $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG" || true
+}
 
 # Resolve lib directory (works both from repo and installed)
 if [[ -d "${IDEALYZE_HOME}/lib" ]]; then
@@ -75,11 +81,11 @@ launch() {
         # Verify the session is still alive by checking if the Ghostty window exists
         local win_id
         win_id=$(jq -r '.panes.window // empty' "$SESSION_FILE")
-        if [[ -n "$win_id" ]] && [[ "$win_id" =~ ^[0-9]+$ ]]; then
+        if [[ -n "$win_id" ]] && [[ "$win_id" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
             # Try to query the window — if it fails, session is stale
             if ! osascript -e "
                 tell application \"Ghostty\"
-                    first window whose id is (${win_id} as integer)
+                    first window whose id is \"${win_id}\"
                 end tell
             " &>/dev/null; then
                 echo "idealize: cleaning up stale session..."
@@ -97,16 +103,24 @@ launch() {
     check_deps
 
     echo "idealize: launching in ${project_dir}..."
+    debug "launching in $project_dir"
+    debug "LIB_DIR=$LIB_DIR CONFIG_DIR=$CONFIG_DIR"
 
     # Create session directory
     mkdir -p "$IDEALYZE_HOME"
 
+    # Clear previous debug log on fresh launch
+    [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && : > "$DEBUG_LOG"
+    debug "=== new session $(date) ==="
+
     # Run AppleScript layout — returns JSON with terminal IDs
     local pane_json
+    debug "running layout.applescript..."
     pane_json=$(osascript "${LIB_DIR}/layout.applescript" \
         "$project_dir" \
         "$LIB_DIR" \
-        "${CONFIG_DIR}/broot-sidebar.toml")
+        "${CONFIG_DIR}/broot-sidebar.toml") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
+    debug "pane_json: $pane_json"
 
     # Build session.json
     local window_id viewer_id tree_id claude_id
@@ -114,6 +128,7 @@ launch() {
     tree_id=$(echo "$pane_json" | jq -r '.tree_id')
     viewer_id=$(echo "$pane_json" | jq -r '.viewer_id')
     claude_id=$(echo "$pane_json" | jq -r '.claude_id')
+    debug "IDs: window=$window_id tree=$tree_id viewer=$viewer_id claude=$claude_id"
 
     cat > "$SESSION_FILE" <<SESSIONEOF
 {
