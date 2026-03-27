@@ -1,0 +1,16 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Read|Edit|Write|Glob|Grep",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "idealyze --hook post-tool-use",
+                        "async": true
+                    }
+                ]
+            }
+        ]
+    }
+}

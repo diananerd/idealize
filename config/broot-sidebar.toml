@@ -1,0 +1,39 @@
+# Idealize: minimal broot config for sidebar display
+# Launched via: broot --conf config/broot-sidebar.toml --listen idealyze /path
+
+max_panels_count = 1
+
+# Minimal columns: just file/dir names with git markers
+cols_order = [
+    "mark",
+    "git",
+    "name",
+]
+
+# Disable search on typing (sidebar is display-only by default)
+# Users can still type to search if they want
+show_selection_mark = true
+
+# Keep broot running on all navigation
+[[verbs]]
+invocation = "focus"
+key = "enter"
+internal = "focus"
+apply_to = "directory"
+leave_broot = false
+
+[[verbs]]
+invocation = "open"
+key = "enter"
+internal = "open_stay"
+apply_to = "file"
+leave_broot = false
+
+# Disable dangerous verbs for safety (override with harmless command)
+[[verbs]]
+invocation = "rm"
+execution = "/bin/true"
+
+[[verbs]]
+invocation = "mv"
+execution = "/bin/true"
