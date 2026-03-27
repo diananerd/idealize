@@ -116,16 +116,9 @@ VIEWER_CMD=$("$LIB_DIR/viewer.sh" "$FILE_PATH" "$LINE_NUMBER" "$VIEWER_MODE")
 debug "viewer_cmd: $VIEWER_CMD"
 
 if [[ -n "$VIEWER_CMD" ]]; then
-    # Send command to viewer pane via Ghostty AppleScript
-    # Escape double quotes in VIEWER_CMD to avoid breaking AppleScript string
-    ESCAPED_CMD=$(printf '%s' "$VIEWER_CMD" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    debug "sending to Ghostty viewer=$VIEWER_ID"
-    osascript -e "
-        tell application \"Ghostty\"
-            set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
-            input text \"${ESCAPED_CMD}\n\" to viewerTerm
-        end tell
-    " 2>"${IDEALYZE_DIR}/osascript-error.log" || debug "osascript failed: $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null)"
+    # Write command to viewer-cmd file (viewer-loop.sh picks it up)
+    debug "writing viewer cmd to file"
+    printf '%s' "$VIEWER_CMD" > "${IDEALYZE_DIR}/viewer-cmd"
 fi
 
 # Store current file for toggle preview

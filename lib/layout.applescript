@@ -1,6 +1,10 @@
 -- lib/layout.applescript
 -- Usage: osascript lib/layout.applescript <project_dir> <idealyze_lib_dir> <broot_conf_path>
 -- Outputs: JSON with terminal IDs for session.json
+--
+-- Layout: tree | viewer | claude
+-- Strategy: split right twice from the initial pane, then resize.
+-- Split returns the NEW pane; the original stays in place.
 
 on run argv
     set projectDir to item 1 of argv
@@ -10,54 +14,43 @@ on run argv
     tell application "Ghostty"
         activate
 
-        -- Create surface config with project working directory
         set cfg to new surface configuration
         set initial working directory of cfg to projectDir
 
-        -- Create main window (this becomes the tree pane)
+        -- Create window → initial pane becomes claude (rightmost)
         set win to new window with configuration cfg
+        set claudeTerminal to terminal 1 of selected tab of win
 
-        -- Get reference to the first terminal (will be tree pane)
-        set treeTerminal to terminal 1 of selected tab of win
+        -- Split left from claude → viewer (middle)
+        set viewerTerminal to split claudeTerminal direction left with configuration cfg
 
-        -- Split right to create the combined center+right area
-        set rightArea to split treeTerminal direction right with configuration cfg
+        -- Split left from viewer → tree (leftmost)
+        set treeTerminal to split viewerTerminal direction left with configuration cfg
 
-        -- rightArea is now the right pane, treeTerminal is the left pane
-        -- Split rightArea to create viewer (left of right) and claude (right of right)
-        set claudeTerminal to split rightArea direction right with configuration cfg
+        -- Layout: treeTerminal | viewerTerminal | claudeTerminal
+        -- Equalize all splits first
+        perform action "equalize_splits" on treeTerminal
 
-        -- Now: treeTerminal | rightArea (viewer) | claudeTerminal
-        set viewerTerminal to rightArea
+        -- Shrink tree to sidebar width
+        repeat 13 times
+            perform action "resize_split:left,10" on treeTerminal
+        end repeat
 
-        -- Get IDs for session tracking
+        -- Get IDs after all splits and resizing
         set treeId to id of treeTerminal
         set viewerId to id of viewerTerminal
         set claudeId to id of claudeTerminal
         set winId to id of win
 
-        -- Resize: make tree narrow (~18%) using perform action
-        -- Note: resize_split amount is in pixels. Repeat to achieve desired proportion.
-        -- Shrink tree pane by moving the divider left (in pixel increments)
-        repeat 15 times
-            perform action "resize_split:left,20" on viewerTerminal
-        end repeat
-
-        -- Grow claude pane slightly
-        repeat 3 times
-            perform action "resize_split:right,20" on claudeTerminal
-        end repeat
-
-        -- Launch broot in tree pane (no --force needed; broot auto-cleans stale sockets)
+        -- Launch broot in tree pane
         input text "broot --conf " & brootConf & " --listen idealyze " & projectDir & "\n" to treeTerminal
 
-        -- Launch bat welcome in viewer pane
-        input text "clear && echo 'idealize: waiting for claude activity...'\n" to viewerTerminal
+        -- Launch viewer loop (handles resize + command updates)
+        input text libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
 
         -- Launch claude in claude pane
         input text "claude\n" to claudeTerminal
 
-        -- Output JSON with terminal IDs (id may be integer, coerce to string)
         return "{\"window_id\":\"" & (winId as text) & "\",\"tree_id\":\"" & (treeId as text) & "\",\"viewer_id\":\"" & (viewerId as text) & "\",\"claude_id\":\"" & (claudeId as text) & "\"}"
     end tell
 end run

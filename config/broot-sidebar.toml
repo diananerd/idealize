@@ -3,10 +3,9 @@
 
 max_panels_count = 1
 
-# Minimal columns: just file/dir names with git markers
+# Columns: tree branches + names (sidebar-friendly)
 cols_order = [
-    "mark",
-    "git",
+    "branch",
     "name",
 ]
 

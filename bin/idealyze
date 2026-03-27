@@ -158,6 +158,20 @@ stop_session() {
         exit 0
     fi
 
+    # Close the Ghostty window
+    local win_id
+    win_id=$(jq -r '.panes.window // empty' "$SESSION_FILE")
+    if [[ -n "$win_id" ]]; then
+        debug "closing Ghostty window: $win_id"
+        osascript -e "
+            tell application \"Ghostty\"
+                try
+                    close (first window whose id is \"${win_id}\")
+                end try
+            end tell
+        " >/dev/null 2>/dev/null || true
+    fi
+
     # Clean up broot socket
     rm -f "/tmp/broot-server-idealyze.sock"
 
