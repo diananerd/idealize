@@ -1,4 +1,4 @@
-# Idealize
+# Idealize: IDE-alize your Claude Code
 
 Watch Claude Code work in real time — file tree, code viewer, and Claude side by side in Ghostty. A lightweight, event-driven IDE experience.
 
@@ -11,7 +11,7 @@ Watch Claude Code work in real time — file tree, code viewer, and Claude side 
 └──────────┴────────────────────────┴──────────────┘
 ```
 
-## Quick start
+## Quick Start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh | sh
@@ -27,7 +27,7 @@ idealyze
 
 This opens a 3-pane Ghostty window with broot on the left, a code viewer in the center, and Claude Code on the right. As Claude reads, edits, and navigates files, the tree and viewer update instantly.
 
-## What you get
+## What You Get
 
 - **Live file tracking** — every Read, Edit, Write, Glob, and Grep updates the tree and viewer
 - **Line highlighting** — the viewer jumps to the exact line Claude is working on
@@ -45,7 +45,7 @@ This opens a 3-pane Ghostty window with broot on the left, a code viewer in the 
 | `idealyze stop` | Close the session and clean up |
 | `idealyze uninstall` | Remove Idealize, its hooks, and all files |
 
-## How it works
+## How It Works
 
 Idealize is event-driven. No background daemons besides a lightweight viewer loop.
 
