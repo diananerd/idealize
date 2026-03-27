@@ -2,7 +2,7 @@
 # lib/viewer-loop.sh — Persistent viewer process for the read pane
 # Watches ~/.idealyze/viewer-cmd for new commands and re-renders on resize (SIGWINCH).
 
-set -euo pipefail
+set -uo pipefail
 
 IDEALYZE_DIR="${HOME}/.idealyze"
 CMD_FILE="${IDEALYZE_DIR}/viewer-cmd"
@@ -35,7 +35,7 @@ PROJECT_DIR="${1:-.}"
 initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f -iname 'readme*' | head -1)
 [[ -z "$initial_file" ]] && initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f ! -name '.*' | sort | head -1)
 if [[ -n "$initial_file" ]]; then
-    CURRENT_CMD="clear && bat --paging=never --style=numbers,header,grid --color=always \"${initial_file}\""
+    CURRENT_CMD="clear && BAT_HIGHLIGHT_COLOR='#3a3a6a' bat --paging=never --style=numbers,header,grid --color=always \"${initial_file}\""
     render
 else
     echo "idealize: no files found in project root"

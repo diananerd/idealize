@@ -37,21 +37,18 @@ if [[ "$VIEWER_MODE" == "glow" && "$FILE_EXT" == "md" ]] && command -v glow &>/d
     exit 0
 fi
 
-# Default: bat with syntax highlighting
-BAT_CMD="clear && bat --paging=never --style=numbers,header,grid --color=always"
-
 # Validate LINE_NUMBER is numeric to prevent injection in arithmetic
 [[ "$LINE_NUMBER" =~ ^[0-9]+$ ]] || LINE_NUMBER=""
 
-if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
-    # Show context around the target line
-    BAT_CMD="${BAT_CMD} --highlight-line ${LINE_NUMBER}"
+BAT="BAT_HIGHLIGHT_COLOR='#3a3a6a' bat --paging=never --style=numbers,header,grid --color=always"
 
-    # Calculate a window around the line
-    start=$((LINE_NUMBER > 10 ? LINE_NUMBER - 10 : 1))
-    BAT_CMD="${BAT_CMD} --line-range ${start}:"
+if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
+    # Terminal-height window centered on the target line, computed at render time
+    CMD="clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${LINE_NUMBER} --line-range \${S}:\${E} \"${FILE_PATH}\""
+else
+    # No specific line — show from top, capped to terminal height
+    CMD="clear && ${BAT} --line-range 1:\$(tput lines) \"${FILE_PATH}\""
 fi
 
-BAT_CMD="${BAT_CMD} \"${FILE_PATH}\""
-debug "bat cmd: $BAT_CMD"
-echo "$BAT_CMD"
+debug "cmd: $CMD"
+echo "$CMD"

@@ -40,7 +40,7 @@ fi
 
 # Read hook JSON from stdin
 HOOK_JSON=$(cat)
-debug "stdin: ${HOOK_JSON:0:200}"
+debug "stdin: ${HOOK_JSON:0:500}"
 
 TOOL_NAME=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_name // empty')
 if [[ -z "$TOOL_NAME" ]]; then
@@ -66,8 +66,20 @@ LINE_NUMBER=""
 case "$TOOL_NAME" in
     Read)
         FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
-        LINE_NUMBER=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.offset // "1"')
-        debug "Read: file=$FILE_PATH line=$LINE_NUMBER"
+        local read_offset read_limit
+        read_offset=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.offset // 0')
+        read_limit=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.limit // 0')
+        if [[ "$read_offset" =~ ^[0-9]+$ && "$read_offset" -gt 0 ]]; then
+            # Center on the middle of the read block
+            if [[ "$read_limit" =~ ^[0-9]+$ && "$read_limit" -gt 0 ]]; then
+                LINE_NUMBER=$(( read_offset + read_limit / 2 ))
+            else
+                LINE_NUMBER="$read_offset"
+            fi
+        else
+            LINE_NUMBER=""
+        fi
+        debug "Read: file=$FILE_PATH line=$LINE_NUMBER (offset=$read_offset limit=$read_limit)"
         ;;
     Edit)
         FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
