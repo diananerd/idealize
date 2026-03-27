@@ -2,7 +2,7 @@
 
 ## Overview
 
-Idealize is an open-source terminal IDE that turns Ghostty + Claude Code into a development environment where you watch Claude work in real time — navigating files, reading code, editing — like watching a coworker in an IDE. Everything is event-driven: no daemons, no loops, no polling.
+Idealize is an open-source terminal IDE that turns Ghostty + Claude Code into a development environment where you watch Claude work in real time — navigating files, reading code, editing — like watching a coworker in an IDE. Everything is event-driven: no background daemons besides a lightweight viewer loop that watches for render commands.
 
 **CLI name:** `idealyze`
 
@@ -58,20 +58,26 @@ PostToolUse hook (async, non-blocking)
         ▼
 idealyze --hook post-tool-use (reads JSON from stdin)
         │
-        ├─► tree.sh ──► broot --send idealyze -c ":focus /dir;:select file"
+        ├─► tree.sh ──► broot --send idealyze -c ":escape;filename"
         │
-        ├─► viewer.sh ──► bat --highlight-line N /path/to/file
-        │                  (or glow if preview mode + markdown file)
+        ├─► viewer.sh ──► builds bat/glow command string
+        │                  writes to ~/.idealyze/viewer-cmd
         │
-        └─► exit 0 (stateless, no daemon)
+        └─► exit 0 (stateless hook, no daemon)
+
+viewer-loop.sh (persistent process in viewer pane)
+        │
+        ├─► polls ~/.idealyze/viewer-cmd every 0.3s
+        ├─► executes new commands (bat/glow) when found
+        └─► re-renders on terminal resize (SIGWINCH)
 ```
 
 ### Key principles
 
-1. **Stateless hooks** — each invocation reads stdin, dispatches commands, exits. No resident process.
+1. **Stateless hooks** — each invocation reads stdin, dispatches commands, exits. The only resident process is `viewer-loop.sh` in the viewer pane.
 2. **Session guard** — hooks check for `~/.idealyze/session.json`. If absent, exit 0 immediately (<1ms overhead when not using idealyze).
 3. **Async execution** — hooks run with `async: true` so Claude is never blocked by UI updates.
-4. **Direct IPC** — broot via socket, bat via re-invocation, glow via re-invocation. No intermediary.
+4. **Direct IPC** — broot via socket, viewer via command file (`~/.idealyze/viewer-cmd`), Ghostty via AppleScript.
 
 ### Session state
 
@@ -79,15 +85,19 @@ Minimal file at `~/.idealyze/session.json`:
 
 ```json
 {
+  "version": "0.1.0",
   "pid": 12345,
   "project_dir": "/path/to/project",
   "broot_socket": "idealyze",
   "viewer_mode": "bat",
   "tree_visible": true,
+  "current_file": null,
+  "current_line": 1,
   "panes": {
-    "tree": "<applescript-pane-ref>",
-    "viewer": "<applescript-pane-ref>",
-    "claude": "<applescript-pane-ref>"
+    "window": "<ghostty-window-id>",
+    "tree": "<ghostty-terminal-id>",
+    "viewer": "<ghostty-terminal-id>",
+    "claude": "<ghostty-terminal-id>"
   }
 }
 ```
@@ -102,9 +112,9 @@ Created by `idealyze`, read by hooks and `toggle`, deleted by `idealyze stop` or
 4. AppleScript: split right → Claude pane (~35%).
 5. AppleScript: in left pane, split right → code viewer pane (middle).
 6. Original left pane → sidebar: run `broot --listen idealyze $PWD`.
-7. Middle pane → run `bat` with welcome message or first file.
+7. Middle pane → run `viewer-loop.sh` (shows README or first file, then polls for commands).
 8. Right pane → run `claude` (Claude Code CLI).
-9. Store pane references in session.json.
+9. Store pane references (window, tree, viewer, claude IDs) in session.json.
 
 ## Claude Code integration
 
@@ -146,11 +156,11 @@ The hook handler parses this and dispatches:
 
 | Tool | Tree action | Viewer action |
 |------|-------------|---------------|
-| Read | `:focus <dir>;:select <file>` | `bat --highlight-line <offset> <file_path>` |
-| Edit | `:focus <dir>;:select <file>` | `bat --highlight-line <edit_line> <file_path>` |
-| Write | `:focus <dir>;:select <file>` | `bat <file_path>` |
+| Read | `:escape;<filename>` | `bat --highlight-line <offset> <file_path>` |
+| Edit | `:escape;<filename>` | `bat --highlight-line <edit_line> <file_path>` |
+| Write | `:escape;<filename>` | `bat <file_path>` |
 | Glob | `:focus <directory>` | (no viewer change) |
-| Grep | `:focus <search_path>` | (no viewer change) |
+| Grep | `:focus <path>` or `:escape;<filename>` | (no viewer change) |
 
 ### Viewer behavior
 
@@ -161,16 +171,17 @@ The hook handler parses this and dispatches:
 ### Tree behavior
 
 - broot runs with `--listen idealyze` at launch.
-- On file events: `broot --send idealyze -c ":focus <parent_dir>;:select <filename>"` navigates and highlights the file.
+- On file events (Read/Edit/Write): `broot --send idealyze -c ":escape;<filename>"` searches and highlights the file.
 - On Glob events: `broot --send idealyze -c ":focus <directory>"` expands and navigates to the directory.
+- On Grep events: `:focus <path>` if directory, `:escape;<filename>` if file.
 
 ## Toggle mechanics
 
 ### `idealyze toggle tree`
 
-1. Read session.json → get tree pane ref and `tree_visible` state.
-2. If visible: AppleScript collapses the tree pane (resize to 0), redistribute space to viewer. Set `tree_visible: false`.
-3. If hidden: AppleScript restores tree pane to ~18%, reduce viewer proportionally. Set `tree_visible: true`.
+1. Read session.json → get viewer pane ref and `tree_visible` state.
+2. If visible: AppleScript shrinks the tree pane via `resize_split:left,20` repeated 30 times on the viewer terminal. Set `tree_visible: false`.
+3. If hidden: AppleScript restores the tree pane via `resize_split:right,20` repeated 15 times on the viewer terminal. Set `tree_visible: true`.
 
 ### `idealyze toggle preview`
 
@@ -225,12 +236,16 @@ idealize/
 ├── lib/
 │   ├── layout.applescript      # Ghostty layout creation
 │   ├── hooks.sh                # PostToolUse handler (stdin JSON → dispatch)
-│   ├── viewer.sh               # bat/glow control
+│   ├── viewer.sh               # bat/glow command builder
+│   ├── viewer-loop.sh          # Persistent viewer process (polls viewer-cmd, handles resize)
 │   ├── tree.sh                 # broot --send commands
 │   └── toggle.sh               # Toggle tree/preview
 ├── config/
 │   ├── broot-sidebar.toml      # Minimal broot config for sidebar mode
 │   └── claude-hooks.json       # Hook template for Claude settings
+├── docs/
+│   ├── design.md               # Architecture and design documentation
+│   └── plan.md                 # Implementation plan
 ├── install.sh                  # curl | sh installer
 ├── README.md
 ├── LICENSE                     # MIT

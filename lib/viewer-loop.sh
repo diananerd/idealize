@@ -30,9 +30,10 @@ echo "" > "$CMD_FILE"
 
 debug "viewer-loop started"
 
-# Show initial file: first non-hidden file in project root
+# Show initial file: prefer README, then first non-hidden file
 PROJECT_DIR="${1:-.}"
-initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f ! -name '.*' | sort | head -1)
+initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f -iname 'readme*' | head -1)
+[[ -z "$initial_file" ]] && initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f ! -name '.*' | sort | head -1)
 if [[ -n "$initial_file" ]]; then
     CURRENT_CMD="clear && bat --paging=never --style=numbers,header,grid --color=always \"${initial_file}\""
     render
@@ -44,7 +45,7 @@ fi
 while true; do
     if [[ -f "$CMD_FILE" ]]; then
         new_cmd=$(cat "$CMD_FILE" 2>/dev/null)
-        if [[ -n "$new_cmd" && "$new_cmd" != "$CURRENT_CMD" ]]; then
+        if [[ -n "$new_cmd" ]]; then
             CURRENT_CMD="$new_cmd"
             debug "new cmd: ${CURRENT_CMD:0:100}"
             render

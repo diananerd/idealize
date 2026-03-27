@@ -28,6 +28,10 @@ internal = "open_stay"
 apply_to = "file"
 leave_broot = false
 
+# Highlight selected file
+[skin]
+selected_line = "rgb(255, 255, 215) rgb(80, 80, 120) Bold"
+
 # Disable dangerous verbs for safety (override with harmless command)
 [[verbs]]
 invocation = "rm"

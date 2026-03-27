@@ -11,7 +11,7 @@ TARGET="${2:-}"
 DEBUG_LOG="${HOME}/.idealyze/debug.log"
 
 debug() {
-    [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && echo "[tree  $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG" || true
+    echo "[tree  $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG"
 }
 
 if [[ -z "$ACTION" || -z "$TARGET" ]]; then
@@ -29,12 +29,9 @@ debug "action=$ACTION target=$TARGET"
 
 case "$ACTION" in
     select)
-        # Navigate to the file's parent directory, then select the file
-        # Uses -c flag (required for sending commands) and ; to chain commands
-        parent_dir=$(dirname "$TARGET")
         filename=$(basename "$TARGET")
-        debug "broot --send $SOCKET_NAME -c ':focus ${parent_dir};:select ${filename}'"
-        broot --send "$SOCKET_NAME" -c ":focus ${parent_dir};:select ${filename}" 2>>"$DEBUG_LOG" || debug "broot send failed"
+        debug "broot --send $SOCKET_NAME -c ':escape;${filename}'"
+        broot --send "$SOCKET_NAME" -c ":escape;${filename}" 2>>"$DEBUG_LOG" || debug "broot send failed"
         ;;
     focus)
         debug "broot --send $SOCKET_NAME -c ':focus ${TARGET}'"

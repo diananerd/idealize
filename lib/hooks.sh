@@ -2,19 +2,20 @@
 # lib/hooks.sh — Claude PostToolUse hook handler
 # Called by Claude with JSON on stdin. Dispatches to tree and viewer.
 
-set -euo pipefail
+set -uo pipefail
 
 IDEALYZE_DIR="${HOME}/.idealyze"
 SESSION_FILE="${IDEALYZE_DIR}/session.json"
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEBUG_LOG="${IDEALYZE_DIR}/debug.log"
 
-# Debug helper — logs to ~/.idealyze/debug.log when IDEALYZE_DEBUG=1
-debug() {
-    [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && echo "[hooks $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG" || true
-}
+# Always log to debug file regardless of IDEALYZE_DEBUG
+echo "[hooks $(date +%H:%M:%S)] --- hook invoked ---" >> "$DEBUG_LOG"
 
-debug "--- hook invoked ---"
+# Debug helper — always log for now
+debug() {
+    echo "[hooks $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG"
+}
 
 # Session guard: exit immediately if no active session
 if [[ ! -f "$SESSION_FILE" ]]; then
@@ -41,7 +42,7 @@ fi
 HOOK_JSON=$(cat)
 debug "stdin: ${HOOK_JSON:0:200}"
 
-TOOL_NAME=$(echo "$HOOK_JSON" | jq -r '.tool_name // empty')
+TOOL_NAME=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_name // empty')
 if [[ -z "$TOOL_NAME" ]]; then
     debug "no tool_name in JSON, exiting"
     exit 0
@@ -54,30 +55,29 @@ LINE_NUMBER=""
 
 case "$TOOL_NAME" in
     Read)
-        FILE_PATH=$(echo "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
-        LINE_NUMBER=$(echo "$HOOK_JSON" | jq -r '.tool_input.offset // "1"')
+        FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
+        LINE_NUMBER=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.offset // "1"')
         debug "Read: file=$FILE_PATH line=$LINE_NUMBER"
         ;;
     Edit)
-        FILE_PATH=$(echo "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
-        # Find the line number of old_string in the file for precise highlighting
-        OLD_STRING=$(echo "$HOOK_JSON" | jq -r '.tool_input.old_string // empty')
-        if [[ -n "$OLD_STRING" && -n "$FILE_PATH" && -f "$FILE_PATH" ]]; then
-            # Get the first line of old_string to search for in the file
-            FIRST_LINE=$(printf '%s' "$OLD_STRING" | head -1)
-            LINE_NUMBER=$(grep -nF "$FIRST_LINE" "$FILE_PATH" 2>/dev/null | head -1 | cut -d: -f1)
+        FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
+        # Find line of new_string in the file (old_string no longer exists post-edit)
+        NEW_STRING=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.new_string // empty')
+        if [[ -n "$NEW_STRING" && -n "$FILE_PATH" && -f "$FILE_PATH" ]]; then
+            FIRST_LINE=$(printf '%s' "$NEW_STRING" | head -1)
+            LINE_NUMBER=$(grep -nF -- "$FIRST_LINE" "$FILE_PATH" 2>/dev/null | head -1 | cut -d: -f1 || true)
         fi
         LINE_NUMBER="${LINE_NUMBER:-1}"
         debug "Edit: file=$FILE_PATH line=$LINE_NUMBER"
         ;;
     Write)
-        FILE_PATH=$(echo "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
+        FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
         LINE_NUMBER="1"
         debug "Write: file=$FILE_PATH"
         ;;
     Grep)
         # Grep: navigate tree to the search path if specified
-        GREP_PATH=$(echo "$HOOK_JSON" | jq -r '.tool_input.path // empty')
+        GREP_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.path // empty')
         debug "Grep: path=$GREP_PATH"
         if [[ -n "$GREP_PATH" ]]; then
             if [[ -d "$GREP_PATH" ]]; then
@@ -90,7 +90,7 @@ case "$TOOL_NAME" in
         ;;
     Glob)
         # Glob: update tree to the search directory, no viewer change
-        GLOB_PATH=$(echo "$HOOK_JSON" | jq -r '.tool_input.path // empty')
+        GLOB_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.path // empty')
         debug "Glob: path=$GLOB_PATH"
         if [[ -n "$GLOB_PATH" && -d "$GLOB_PATH" ]]; then
             "$LIB_DIR/tree.sh" focus "$GLOB_PATH" &
@@ -118,13 +118,12 @@ debug "viewer_cmd: $VIEWER_CMD"
 if [[ -n "$VIEWER_CMD" ]]; then
     # Write command to viewer-cmd file (viewer-loop.sh picks it up)
     debug "writing viewer cmd to file"
-    printf '%s' "$VIEWER_CMD" > "${IDEALYZE_DIR}/viewer-cmd"
+    printf '%s' "$VIEWER_CMD" > "${IDEALYZE_DIR}/viewer-cmd.tmp"
+    mv "${IDEALYZE_DIR}/viewer-cmd.tmp" "${IDEALYZE_DIR}/viewer-cmd"
 fi
 
-# Store current file for toggle preview
-jq --arg f "$FILE_PATH" --arg l "${LINE_NUMBER:-1}" \
-    '.current_file = $f | .current_line = ($l | tonumber)' \
-    "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+# Store current file for toggle preview (separate file to avoid race conditions)
+printf '%s\n%s' "$FILE_PATH" "${LINE_NUMBER:-1}" > "${IDEALYZE_DIR}/current-file"
 
 debug "done"
 wait
