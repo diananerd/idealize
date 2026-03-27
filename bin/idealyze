@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# idealyze — Terminal IDE for Claude Code
+# https://github.com/diananerd/idealize
+
+set -euo pipefail
+
+VERSION="0.1.0"
+IDEALYZE_HOME="${HOME}/.idealyze"
+SESSION_FILE="${IDEALYZE_HOME}/session.json"
+
+# Resolve lib directory (works both from repo and installed)
+if [[ -d "${IDEALYZE_HOME}/lib" ]]; then
+    LIB_DIR="${IDEALYZE_HOME}/lib"
+else
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    LIB_DIR="${SCRIPT_DIR}/../lib"
+fi
+
+# Resolve config directory
+if [[ -d "${IDEALYZE_HOME}/config" ]]; then
+    CONFIG_DIR="${IDEALYZE_HOME}/config"
+else
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    CONFIG_DIR="${SCRIPT_DIR}/../config"
+fi
+
+usage() {
+    cat <<'EOF'
+idealyze — Terminal IDE for Claude Code
+
+Usage:
+    idealyze                  Launch IDE layout in current directory
+    idealyze toggle tree      Collapse/restore file tree sidebar
+    idealyze toggle preview   Switch between bat and glow viewer
+    idealyze stop             Close session
+    idealyze uninstall        Remove idealyze completely
+    idealyze --version        Show version
+    idealyze --help           Show this help
+
+Requirements: Ghostty 1.3+, broot, bat, claude, jq
+Optional: glow (for markdown preview)
+EOF
+}
+
+check_deps() {
+    local missing=()
+    command -v osascript &>/dev/null || missing+=("osascript (macOS)")
+    command -v broot &>/dev/null || missing+=("broot")
+    command -v bat &>/dev/null || missing+=("bat")
+    command -v claude &>/dev/null || missing+=("claude")
+    command -v jq &>/dev/null || missing+=("jq")
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "idealize: missing dependencies: ${missing[*]}" >&2
+        exit 1
+    fi
+
+    # Check Ghostty is installed
+    if [[ ! -d "/Applications/Ghostty.app" ]]; then
+        echo "idealize: Ghostty.app not found in /Applications" >&2
+        exit 1
+    fi
+
+    # Optional: glow
+    if ! command -v glow &>/dev/null; then
+        echo "idealize: glow not found (optional — preview mode will use bat)" >&2
+    fi
+}
+
+launch() {
+    local project_dir="${1:-$(pwd)}"
+
+    # Check for existing session
+    if [[ -f "$SESSION_FILE" ]]; then
+        # Verify the session is still alive by checking if the Ghostty window exists
+        local win_id
+        win_id=$(jq -r '.panes.window // empty' "$SESSION_FILE")
+        if [[ -n "$win_id" ]]; then
+            # Try to query the window — if it fails, session is stale
+            if ! osascript -e "
+                tell application \"Ghostty\"
+                    first window whose id is (${win_id} as integer)
+                end tell
+            " &>/dev/null; then
+                echo "idealize: cleaning up stale session..."
+                rm -f "$SESSION_FILE"
+                rm -f "/tmp/broot-server-idealyze.sock"
+            else
+                echo "idealize: session already active. Run 'idealyze stop' first." >&2
+                exit 1
+            fi
+        else
+            rm -f "$SESSION_FILE"
+        fi
+    fi
+
+    check_deps
+
+    echo "idealize: launching in ${project_dir}..."
+
+    # Create session directory
+    mkdir -p "$IDEALYZE_HOME"
+
+    # Run AppleScript layout — returns JSON with terminal IDs
+    local pane_json
+    pane_json=$(osascript "${LIB_DIR}/layout.applescript" \
+        "$project_dir" \
+        "$LIB_DIR" \
+        "${CONFIG_DIR}/broot-sidebar.toml")
+
+    # Build session.json
+    local window_id viewer_id tree_id claude_id
+    window_id=$(echo "$pane_json" | jq -r '.window_id')
+    tree_id=$(echo "$pane_json" | jq -r '.tree_id')
+    viewer_id=$(echo "$pane_json" | jq -r '.viewer_id')
+    claude_id=$(echo "$pane_json" | jq -r '.claude_id')
+
+    cat > "$SESSION_FILE" <<SESSIONEOF
+{
+    "version": "${VERSION}",
+    "pid": $$,
+    "project_dir": "${project_dir}",
+    "broot_socket": "idealyze",
+    "viewer_mode": "bat",
+    "tree_visible": true,
+    "current_file": null,
+    "current_line": 1,
+    "panes": {
+        "window": "${window_id}",
+        "tree": "${tree_id}",
+        "viewer": "${viewer_id}",
+        "claude": "${claude_id}"
+    }
+}
+SESSIONEOF
+
+    echo "idealize: ready. Claude hooks will sync automatically."
+}
+
+stop_session() {
+    if [[ ! -f "$SESSION_FILE" ]]; then
+        echo "idealize: no active session" >&2
+        exit 0
+    fi
+
+    # Clean up broot socket
+    rm -f "/tmp/broot-server-idealyze.sock"
+
+    # Remove session file
+    rm -f "$SESSION_FILE"
+
+    echo "idealize: session closed"
+}
+
+uninstall() {
+    echo "idealize: uninstalling..."
+
+    # Remove hooks from Claude settings
+    local claude_settings="${HOME}/.claude/settings.json"
+    if [[ -f "$claude_settings" ]]; then
+        # Remove idealize hook entries
+        jq 'if .hooks.PostToolUse then
+            .hooks.PostToolUse |= map(
+                select(.hooks | all(.command | test("idealyze") | not))
+            ) |
+            if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end |
+            if .hooks | length == 0 then del(.hooks) else . end
+        else . end' "$claude_settings" > "${claude_settings}.tmp" \
+            && mv "${claude_settings}.tmp" "$claude_settings"
+        echo "  removed hooks from ${claude_settings}"
+    fi
+
+    # Remove idealyze home
+    rm -rf "$IDEALYZE_HOME"
+    echo "  removed ${IDEALYZE_HOME}"
+
+    # Remove binary (self-delete)
+    local self_path
+    self_path="$(realpath "$0")"
+    echo "  removing ${self_path}"
+    rm -f "$self_path"
+
+    echo "idealize: uninstalled"
+}
+
+# --- Main ---
+
+case "${1:-}" in
+    --version|-v)
+        echo "idealyze ${VERSION}"
+        ;;
+    --help|-h)
+        usage
+        ;;
+    --hook)
+        # Internal: called by Claude hooks
+        shift
+        case "${1:-}" in
+            post-tool-use)
+                exec "${LIB_DIR}/hooks.sh"
+                ;;
+            *)
+                exit 0
+                ;;
+        esac
+        ;;
+    toggle)
+        shift
+        exec "${LIB_DIR}/toggle.sh" "${1:-}"
+        ;;
+    stop)
+        stop_session
+        ;;
+    uninstall)
+        uninstall
+        ;;
+    "")
+        launch
+        ;;
+    *)
+        echo "idealize: unknown command '${1}'" >&2
+        usage
+        exit 1
+        ;;
+esac
