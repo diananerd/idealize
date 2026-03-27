@@ -135,6 +135,7 @@ launch() {
     "version": "${VERSION}",
     "pid": $$,
     "project_dir": "${project_dir}",
+    "scope": "${IDEALYZE_SCOPE:-project}",
     "broot_socket": "idealyze",
     "viewer_mode": "bat",
     "tree_visible": true,
@@ -249,6 +250,9 @@ case "${1:-}" in
     uninstall)
         shift
         uninstall "${1:-}"
+        ;;
+    --global)
+        IDEALYZE_SCOPE="global" launch
         ;;
     "")
         launch

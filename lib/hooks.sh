@@ -24,8 +24,8 @@ if [[ ! -f "$SESSION_FILE" ]]; then
 fi
 
 # Read session state (single jq call)
-read -r VIEWER_MODE VIEWER_ID < <(jq -r '[.viewer_mode // "bat", (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
-debug "session: viewer_mode=$VIEWER_MODE viewer_id=$VIEWER_ID"
+read -r VIEWER_MODE VIEWER_ID PROJECT_DIR SCOPE < <(jq -r '[.viewer_mode // "bat", (.panes.viewer // "" | tostring), .project_dir // "", .scope // "project"] | @tsv' "$SESSION_FILE")
+debug "session: viewer_mode=$VIEWER_MODE viewer_id=$VIEWER_ID project_dir=$PROJECT_DIR scope=$SCOPE"
 
 if [[ -z "$VIEWER_ID" ]]; then
     debug "empty VIEWER_ID, exiting"
@@ -48,6 +48,16 @@ if [[ -z "$TOOL_NAME" ]]; then
     exit 0
 fi
 debug "tool: $TOOL_NAME"
+
+# Filter by project scope (skip events from other projects unless scope=global)
+if [[ "$SCOPE" != "global" && -n "$PROJECT_DIR" ]]; then
+    # Quick check: extract any file/path from the hook JSON
+    EVENT_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // .tool_input.path // empty')
+    if [[ -n "$EVENT_PATH" && "$EVENT_PATH" != "$PROJECT_DIR"* ]]; then
+        debug "skipped: $EVENT_PATH outside project $PROJECT_DIR"
+        exit 0
+    fi
+fi
 
 # Extract file path based on tool type
 FILE_PATH=""
