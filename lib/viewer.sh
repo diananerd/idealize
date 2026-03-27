@@ -29,6 +29,9 @@ fi
 # Default: bat with syntax highlighting
 BAT_CMD="clear && bat --paging=never --style=numbers,header,grid --color=always"
 
+# Validate LINE_NUMBER is numeric to prevent injection in arithmetic
+[[ "$LINE_NUMBER" =~ ^[0-9]+$ ]] || LINE_NUMBER=""
+
 if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
     # Show context around the target line
     BAT_CMD="${BAT_CMD} --highlight-line ${LINE_NUMBER}"

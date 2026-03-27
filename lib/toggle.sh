@@ -17,9 +17,10 @@ ACTION="${1:-}"
 
 case "$ACTION" in
     tree)
-        TREE_VISIBLE=$(jq -r '.tree_visible' "$SESSION_FILE")
-        TREE_ID=$(jq -r '.panes.tree' "$SESSION_FILE")
-        VIEWER_ID=$(jq -r '.panes.viewer' "$SESSION_FILE")
+        read -r TREE_VISIBLE VIEWER_ID < <(jq -r '[.tree_visible, (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
+
+        # Validate VIEWER_ID is numeric to prevent AppleScript injection
+        [[ "$VIEWER_ID" =~ ^[0-9]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
 
         if [[ "$TREE_VISIBLE" == "true" ]]; then
             # Collapse: resize tree to minimum via perform action (pixel-based)
@@ -52,10 +53,10 @@ case "$ACTION" in
         ;;
 
     preview)
-        CURRENT_MODE=$(jq -r '.viewer_mode' "$SESSION_FILE")
-        CURRENT_FILE=$(jq -r '.current_file // empty' "$SESSION_FILE")
-        CURRENT_LINE=$(jq -r '.current_line // "1"' "$SESSION_FILE")
-        VIEWER_ID=$(jq -r '.panes.viewer' "$SESSION_FILE")
+        read -r CURRENT_MODE CURRENT_FILE CURRENT_LINE VIEWER_ID < <(jq -r '[.viewer_mode, (.current_file // ""), (.current_line // 1 | tostring), (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
+
+        # Validate VIEWER_ID is numeric
+        [[ "$VIEWER_ID" =~ ^[0-9]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
 
         if [[ "$CURRENT_MODE" == "bat" ]]; then
             NEW_MODE="glow"

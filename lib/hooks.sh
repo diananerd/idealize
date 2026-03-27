@@ -13,16 +13,18 @@ if [[ ! -f "$SESSION_FILE" ]]; then
     exit 0
 fi
 
-# Read session state
-VIEWER_MODE=$(jq -r '.viewer_mode // "bat"' "$SESSION_FILE")
-VIEWER_ID=$(jq -r '.panes.viewer // empty' "$SESSION_FILE")
+# Read session state (single jq call)
+read -r VIEWER_MODE VIEWER_ID < <(jq -r '[.viewer_mode // "bat", (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
 
 if [[ -z "$VIEWER_ID" ]]; then
     exit 0
 fi
 
-# Read hook JSON from stdin
-HOOK_JSON=$(cat)
+# Validate VIEWER_ID is numeric to prevent AppleScript injection
+[[ "$VIEWER_ID" =~ ^[0-9]+$ ]] || exit 0
+
+# Read hook JSON from stdin (with timeout to avoid hanging)
+HOOK_JSON=$(timeout 5 cat) || exit 0
 
 TOOL_NAME=$(echo "$HOOK_JSON" | jq -r '.tool_name // empty')
 if [[ -z "$TOOL_NAME" ]]; then

@@ -75,7 +75,7 @@ launch() {
         # Verify the session is still alive by checking if the Ghostty window exists
         local win_id
         win_id=$(jq -r '.panes.window // empty' "$SESSION_FILE")
-        if [[ -n "$win_id" ]]; then
+        if [[ -n "$win_id" ]] && [[ "$win_id" =~ ^[0-9]+$ ]]; then
             # Try to query the window — if it fails, session is stale
             if ! osascript -e "
                 tell application \"Ghostty\"
@@ -153,6 +153,12 @@ stop_session() {
 }
 
 uninstall() {
+    if [[ "${1:-}" != "--yes" ]]; then
+        printf "idealize: remove all files and hooks? [y/N] "
+        read -r confirm
+        [[ "$confirm" =~ ^[Yy]$ ]] || { echo "idealize: cancelled"; exit 0; }
+    fi
+
     echo "idealize: uninstalling..."
 
     # Remove hooks from Claude settings
@@ -212,7 +218,8 @@ case "${1:-}" in
         stop_session
         ;;
     uninstall)
-        uninstall
+        shift
+        uninstall "${1:-}"
         ;;
     "")
         launch
