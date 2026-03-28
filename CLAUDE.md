@@ -113,10 +113,10 @@ git tag -f latest && git push origin latest --force
 
 Same as steps 3-6 but install from prod (no --beta flag).
 
-### 9. Sync dev
+### 9. Rebase dev from main
 
 ```bash
-git checkout dev && git merge main && git push
+git checkout dev && git rebase main && git push
 ```
 
 ## Config System
