@@ -70,7 +70,7 @@ provider_remove_hooks() {
     cp "$settings" "${settings}.bak"
     jq 'if .hooks.PostToolUse then
         .hooks.PostToolUse |= map(
-            select(.hooks | all(.command | test("idealyze|idealize|hooks\\.sh") | not))
+            select(.hooks | all(.command | test("idealyze|idealize/lib/hooks\\.sh") | not))
         ) |
         if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end |
         if .hooks | length == 0 then del(.hooks) else . end
