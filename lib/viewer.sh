@@ -32,7 +32,14 @@ FILE_EXT="${FILE_PATH##*.}"
 
 # Use glow for markdown when in preview mode
 if [[ "$VIEWER_MODE" == "glow" && "$FILE_EXT" == "md" ]] && command -v glow &>/dev/null; then
-    CMD="clear && glow -w \$(tput cols) \"${FILE_PATH}\""
+    # Resolve glow style (installed or repo config)
+    GLOW_STYLE=""
+    if [[ -f "${HOME}/.idealyze/config/glow-style.json" ]]; then
+        GLOW_STYLE="-s ${HOME}/.idealyze/config/glow-style.json"
+    elif [[ -f "$(cd "$(dirname "$0")/../config" 2>/dev/null && pwd)/glow-style.json" ]]; then
+        GLOW_STYLE="-s $(cd "$(dirname "$0")/../config" && pwd)/glow-style.json"
+    fi
+    CMD="clear && glow ${GLOW_STYLE} -w \$(tput cols) \"${FILE_PATH}\""
     debug "glow cmd: $CMD"
     echo "$CMD"
     exit 0

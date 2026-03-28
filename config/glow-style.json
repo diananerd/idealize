@@ -1,0 +1,82 @@
+{
+  "document": {
+    "margin": 1
+  },
+  "heading": {
+    "bold": true,
+    "block_suffix": "\n",
+    "prefix": ""
+  },
+  "h1": {
+    "bold": true,
+    "upper": true,
+    "prefix": "",
+    "suffix": "",
+    "block_suffix": "\n"
+  },
+  "h2": {
+    "bold": true,
+    "prefix": "",
+    "suffix": "",
+    "block_suffix": "\n"
+  },
+  "h3": {
+    "bold": true,
+    "prefix": "",
+    "suffix": "",
+    "block_suffix": "\n"
+  },
+  "h4": {
+    "bold": true,
+    "prefix": "",
+    "suffix": ""
+  },
+  "h5": {
+    "bold": true,
+    "prefix": "",
+    "suffix": ""
+  },
+  "h6": {
+    "bold": true,
+    "prefix": "",
+    "suffix": ""
+  },
+  "paragraph": {},
+  "code_block": {
+    "margin": 2,
+    "chroma": {
+      "theme": "dracula"
+    }
+  },
+  "code": {
+    "color": "203"
+  },
+  "link": {
+    "underline": true,
+    "color": "39"
+  },
+  "link_text": {
+    "bold": true,
+    "color": "39"
+  },
+  "list": {
+    "level_indent": 2
+  },
+  "table": {
+    "center_separator": "┼",
+    "column_separator": "│",
+    "row_separator": "─"
+  },
+  "emph": {
+    "italic": true
+  },
+  "strong": {
+    "bold": true
+  },
+  "strikethrough": {
+    "strikethrough": true
+  },
+  "horizontal_rule": {
+    "color": "240"
+  }
+}

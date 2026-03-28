@@ -90,6 +90,11 @@ case "$ACTION" in
         [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
 
         if [[ "$CURRENT_MODE" == "bat" ]]; then
+            if ! command -v glow &>/dev/null; then
+                echo "idealize: glow not installed — preview mode requires glow" >&2
+                echo "  install: brew install glow" >&2
+                exit 1
+            fi
             NEW_MODE="glow"
         else
             NEW_MODE="bat"
