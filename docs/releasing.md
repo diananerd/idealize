@@ -6,8 +6,8 @@ Idealize uses a simple tag-based release system. No CI/CD — just git tags that
 
 | Channel | Tag | Install command | Purpose |
 |---------|-----|-----------------|---------|
-| **stable** | `latest` | `bash <(curl -fsSL .../latest/install.sh)` | Default. What users get. |
-| **beta** | `beta` | `bash <(curl -fsSL .../beta/install.sh) --beta` | Public testing before promoting to stable. |
+| **stable** | `latest` | `curl -fsSL idealize.diananerd.com/install \| bash` | Default. What users get. |
+| **beta** | `beta` | `curl -fsSL idealize.diananerd.com/install?channel=beta \| bash` | Public testing before promoting to stable. |
 
 Both `latest` and `beta` are **movable** tags — they get force-pushed to new commits as needed.
 

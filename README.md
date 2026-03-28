@@ -16,7 +16,7 @@ When your AI agent reads a file, the viewer shows it with syntax highlighting. W
 ## Quick Start
 
 ```bash
-bash <(curl -fsSL https://idealize.diananerd.com/install.sh)
+curl -fsSL https://idealize.diananerd.com/install | bash
 ```
 
 The installer walks you through everything: checks your system, installs missing dependencies via brew, downloads Idealize, configures agent hooks, and sets up Ghostty. Add `--auto` to skip prompts and install everything.
@@ -136,22 +136,22 @@ The installer and `idealyze doctor` can install all brew dependencies automatica
 
 **Stable (recommended):**
 ```bash
-bash <(curl -fsSL https://idealize.diananerd.com/install.sh)
+curl -fsSL https://idealize.diananerd.com/install | bash
 ```
 
 **Beta (pre-release features):**
 ```bash
-bash <(curl -fsSL https://idealize.diananerd.com/install.sh?channel=beta) --beta
+curl -fsSL https://idealize.diananerd.com/install?channel=beta | bash
 ```
 
 **Non-interactive (CI/scripting):**
 ```bash
-bash <(curl -fsSL https://idealize.diananerd.com/install.sh) --auto
+curl -fsSL https://idealize.diananerd.com/install | bash --auto
 ```
 
 **Project-local install:**
 ```bash
-bash <(curl -fsSL https://idealize.diananerd.com/install.sh) --project
+curl -fsSL https://idealize.diananerd.com/install | bash --project
 ```
 
 ## Contributing

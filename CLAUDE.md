@@ -68,7 +68,7 @@ pkill -f viewer-loop 2>/dev/null; true
 ### 5. Install from beta and test
 
 ```bash
-bash <(curl -fsSL --resolve "idealize.diananerd.com:443:$(dig idealize.diananerd.com @1.1.1.1 +short | head -1)" "https://idealize.diananerd.com/install.sh?channel=beta") --auto --beta
+curl -fsSL --resolve "idealize.diananerd.com:443:$(dig idealize.diananerd.com @1.1.1.1 +short | head -1)" "https://idealize.diananerd.com/install?channel=beta" | bash -s -- --auto --beta
 ```
 
 ### 6. E2E test (ALL of these, every time)
@@ -141,7 +141,7 @@ To add a new provider: create `lib/providers/<name>.sh` implementing the interfa
 - **viewer-loop uses `sleep & wait`** — makes sleep interruptible by signals
 - **`set -uo pipefail`** in most scripts, **no `-e`** in hooks.sh (must not die silently)
 - **Debug logging gated** behind `IDEALYZE_DEBUG=1` to avoid unbounded log growth
-- **`bash <(curl ...)`** not `curl | bash` — prevents stdin consumption by subprocesses
+- **`curl | bash` via bootstrapper** — `/install` endpoint serves a bootstrapper that downloads to temp file then executes, preventing stdin consumption
 
 ## Testing Hooks Locally
 
