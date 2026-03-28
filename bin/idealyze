@@ -177,16 +177,22 @@ doctor() {
 
     # --- Hooks ---
     echo -e "\n${B}Hooks${N}"
-    local claude_settings="${HOME}/.claude/settings.json"
-    if [[ -f "$claude_settings" ]]; then
-        if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command | test("hooks\\.sh"))' "$claude_settings" &>/dev/null; then
-            echo -e "  ${ok}  Claude Code PostToolUse hook configured"
+    PROVIDER=$(cfg "provider" "claude-code")
+    if [[ -f "${LIB_DIR}/providers/${PROVIDER}.sh" ]]; then
+        source "${LIB_DIR}/providers/${PROVIDER}.sh"
+        if provider_is_installed; then
+            echo -e "  ${ok}  $(provider_name) installed"
+            if provider_check_hooks; then
+                echo -e "  ${ok}  hooks configured"
+            else
+                echo -e "  ${bad}  hooks not configured"
+                all_ok=false
+            fi
         else
-            echo -e "  ${bad}  Claude Code hook not found in settings.json"
-            all_ok=false
+            echo -e "  ${opt}  $(provider_name) not installed"
         fi
     else
-        echo -e "  ${bad}  ${claude_settings} not found"
+        echo -e "  ${bad}  provider '${PROVIDER}' not found"
         all_ok=false
     fi
 
@@ -263,14 +269,10 @@ doctor() {
     # --- Version check ---
     echo -e "\n${B}Version${N}"
     echo -e "  ${ok}  ${VERSION} (installed)"
-    local channel="latest"
-    if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
-        local meta_channel
-        meta_channel=$(grep '^channel=' "${IDEALYZE_HOME}/.install-meta" 2>/dev/null | cut -d= -f2)
-        [[ -n "$meta_channel" ]] && channel="$meta_channel"
-    fi
+    local channel
+    channel=$(cfg "updates.channel" "latest")
     local remote_ver
-    remote_ver=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/diananerd/idealize/${channel}/bin/idealyze" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2)
+    remote_ver=$(curl -fsSL --max-time "$(cfg_int updates.check_timeout 3)" "https://raw.githubusercontent.com/diananerd/idealize/${channel}/bin/idealyze" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2)
     if [[ -n "$remote_ver" ]]; then
         if [[ "$remote_ver" != "$VERSION" ]]; then
             echo -e "  ${Y}!!${N}  ${remote_ver} available on ${channel} — run ${B}idealyze update${N}"
@@ -289,6 +291,24 @@ doctor() {
     echo ""
 }
 
+check_preflight() {
+    local errors=()
+    [[ "$(uname -s)" != "Darwin" ]] && errors+=("macOS required")
+    [[ ! -d "/Applications/Ghostty.app" ]] && errors+=("Ghostty not found")
+    command -v jq &>/dev/null || errors+=("jq not found")
+    command -v broot &>/dev/null || errors+=("broot not found")
+    command -v bat &>/dev/null || errors+=("bat not found")
+    command -v osascript &>/dev/null || errors+=("osascript not found")
+    command -v curl &>/dev/null || errors+=("curl not found")
+
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "idealize: preflight failed:" >&2
+        for e in "${errors[@]}"; do echo "  - $e" >&2; done
+        echo "  run 'idealyze doctor' to fix" >&2
+        exit 1
+    fi
+}
+
 launch() {
     local project_dir="${1:-$(pwd)}"
 
@@ -304,7 +324,7 @@ launch() {
             " &>/dev/null; then
                 echo "idealize: cleaning up stale session..."
                 rm -f "$SESSION_FILE"
-                rm -f "/tmp/broot-server-idealyze.sock"
+                rm -f "/tmp/broot-server-$(cfg broot_socket idealyze).sock"
             else
                 echo "idealize: session already active. Run 'idealyze stop' first." >&2
                 exit 1
@@ -314,7 +334,7 @@ launch() {
         fi
     fi
 
-    check_deps
+    check_preflight
 
     echo "idealize: launching in ${project_dir}..."
     debug "launching in $project_dir"
@@ -395,7 +415,7 @@ stop_session() {
         " >/dev/null 2>/dev/null || true
     fi
 
-    rm -f "/tmp/broot-server-idealyze.sock"
+    rm -f "/tmp/broot-server-$(cfg broot_socket idealyze).sock"
     rm -f "$SESSION_FILE"
 
     echo "idealize: session closed"
@@ -453,29 +473,16 @@ uninstall() {
                 end tell
             " &>/dev/null || true
         fi
-        rm -f "/tmp/broot-server-idealyze.sock"
+        rm -f "/tmp/broot-server-$(cfg broot_socket idealyze).sock"
         echo -e "  ${ok}  session stopped"
     fi
 
-    # --- Remove hooks from Claude settings ---
-    local claude_settings="${HOME}/.claude/settings.json"
-    if [[ -f "$claude_settings" ]]; then
-        if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command | test("idealyze|idealize|hooks\\.sh"))' "$claude_settings" &>/dev/null; then
-            cp "$claude_settings" "${claude_settings}.bak"
-            jq 'if .hooks.PostToolUse then
-                .hooks.PostToolUse |= map(
-                    select(.hooks | all(.command | test("idealyze|idealize|hooks\\.sh") | not))
-                ) |
-                if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end |
-                if .hooks | length == 0 then del(.hooks) else . end
-            else . end' "$claude_settings" > "${claude_settings}.tmp" \
-                && mv "${claude_settings}.tmp" "$claude_settings"
-            echo -e "  ${ok}  removed hooks from settings.json ${D}(backup: settings.json.bak)${N}"
-        else
-            echo -e "  ${skip}  no hooks to remove"
-        fi
-    else
-        echo -e "  ${skip}  no Claude settings found"
+    # --- Remove hooks ---
+    PROVIDER=$(cfg "provider" "claude-code")
+    if [[ -f "${LIB_DIR}/providers/${PROVIDER}.sh" ]]; then
+        source "${LIB_DIR}/providers/${PROVIDER}.sh"
+        provider_remove_hooks
+        echo -e "  ${ok}  removed $(provider_name) hooks ${D}(backup: settings.json.bak)${N}"
     fi
 
     # --- Revert Ghostty config ---
@@ -518,13 +525,8 @@ uninstall() {
 }
 
 update() {
-    # Detect current channel from install metadata
-    local channel="latest"
-    if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
-        local meta_channel
-        meta_channel=$(grep '^channel=' "${IDEALYZE_HOME}/.install-meta" 2>/dev/null | cut -d= -f2)
-        [[ -n "$meta_channel" ]] && channel="$meta_channel"
-    fi
+    local channel
+    channel=$(cfg "updates.channel" "latest")
 
     echo "idealize: updating from ${channel} channel..."
 
@@ -540,15 +542,11 @@ update() {
 
 check_for_updates() {
     # Quick background check — compare local version with remote
-    local channel="latest"
-    if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
-        local meta_channel
-        meta_channel=$(grep '^channel=' "${IDEALYZE_HOME}/.install-meta" 2>/dev/null | cut -d= -f2)
-        [[ -n "$meta_channel" ]] && channel="$meta_channel"
-    fi
+    local channel
+    channel=$(cfg "updates.channel" "latest")
 
     local remote_version
-    remote_version=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/diananerd/idealize/${channel}/bin/idealyze" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2)
+    remote_version=$(curl -fsSL --max-time "$(cfg_int updates.check_timeout 3)" "https://raw.githubusercontent.com/diananerd/idealize/${channel}/bin/idealyze" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2)
 
     if [[ -n "$remote_version" && "$remote_version" != "$VERSION" ]]; then
         echo "idealize: update available (${VERSION} → ${remote_version}). Run 'idealyze update'" >&2
@@ -598,7 +596,7 @@ case "${1:-}" in
         ;;
     --with-agent)
         shift
-        IDEALYZE_WITH_AGENT="1" IDEALYZE_AGENT_CMD="${1:-claude}" launch
+        IDEALYZE_WITH_AGENT="1" IDEALYZE_AGENT_CMD="${1:-$(cfg agent_cmd claude)}" launch
         ;;
     "")
         launch
