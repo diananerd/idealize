@@ -23,50 +23,53 @@ debug "action=$ACTION"
 
 case "$ACTION" in
     tree)
-        read -r TREE_VISIBLE VIEWER_ID < <(jq -r '[.tree_visible, (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
-        debug "tree_visible=$TREE_VISIBLE viewer_id=$VIEWER_ID"
+        TREE_VISIBLE=$(jq -r '.tree_visible' "$SESSION_FILE")
+        TREE_ID=$(jq -r '.panes.tree // ""' "$SESSION_FILE")
+        VIEWER_ID=$(jq -r '.panes.viewer // ""' "$SESSION_FILE")
+        PROJECT_DIR=$(jq -r '.project_dir // ""' "$SESSION_FILE")
+        debug "tree_visible=$TREE_VISIBLE tree_id=$TREE_ID viewer_id=$VIEWER_ID"
 
-        # Validate VIEWER_ID to prevent AppleScript injection
         [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
 
         if [[ "$TREE_VISIBLE" == "true" ]]; then
-            debug "collapsing tree"
+            # Close the tree pane
+            debug "closing tree pane"
+            [[ "$TREE_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid tree id" >&2; exit 1; }
             osascript -e "
                 tell application \"Ghostty\"
-                    set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
-                    -- Shrink tree pane by moving divider left repeatedly (pixels)
-                    repeat 30 times
-                        perform action \"resize_split:left,20\" on viewerTerm
-                    end repeat
+                    set treeTerm to first terminal whose id is \"${TREE_ID}\"
+                    perform action \"close_surface\" on treeTerm
                 end tell
-            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || {
-                echo "idealize: failed to collapse tree — $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null || echo 'unknown osascript error')" >&2
-                exit 1
-            }
-            if ! jq '.tree_visible = false' "$SESSION_FILE" > "${SESSION_FILE}.tmp"; then
-                echo "idealize: failed to update session file" >&2
-                exit 1
-            fi
-            mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
-            echo "idealize: tree collapsed"
+            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
+            jq '.tree_visible = false | .panes.tree = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            echo "idealize: tree hidden"
         else
-            debug "restoring tree"
-            osascript -e "
-                tell application \"Ghostty\"
-                    set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
-                    repeat 15 times
-                        perform action \"resize_split:right,20\" on viewerTerm
-                    end repeat
-                end tell
-            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || {
-                echo "idealize: failed to restore tree — $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null || echo 'unknown osascript error')" >&2
-                exit 1
-            }
-            if ! jq '.tree_visible = true' "$SESSION_FILE" > "${SESSION_FILE}.tmp"; then
-                echo "idealize: failed to update session file" >&2
-                exit 1
+            # Re-create tree pane by splitting left from viewer
+            debug "re-creating tree pane"
+            # Resolve broot config path
+            BROOT_CONF=""
+            if [[ -f "${IDEALYZE_DIR}/config/broot-sidebar.toml" ]]; then
+                BROOT_CONF="${IDEALYZE_DIR}/config/broot-sidebar.toml"
+            elif [[ -d "$LIB_DIR/../config" ]]; then
+                BROOT_CONF="$(cd "$LIB_DIR/../config" && pwd)/broot-sidebar.toml"
             fi
-            mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            NEW_TREE_ID=$(osascript -e "
+                tell application \"Ghostty\"
+                    set cfg to new surface configuration
+                    set initial working directory of cfg to \"${PROJECT_DIR}\"
+                    set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
+                    set treeTerm to split viewerTerm direction left with configuration cfg
+                    repeat 30 times
+                        perform action \"resize_split:left,10\" on treeTerm
+                    end repeat
+                    input text \"broot --conf ${BROOT_CONF} --listen idealyze ${PROJECT_DIR}\n\" to treeTerm
+                    return id of treeTerm
+                end tell
+            " 2>"${IDEALYZE_DIR}/osascript-error.log") || {
+                echo "idealize: failed to restore tree" >&2; exit 1
+            }
+            debug "new tree_id=$NEW_TREE_ID"
+            jq --arg t "$NEW_TREE_ID" '.tree_visible = true | .panes.tree = $t' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: tree restored"
         fi
         ;;
