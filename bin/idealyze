@@ -85,11 +85,13 @@ ghostty_config_remove() {
 }
 
 ghostty_reload() {
-    # Reload config on any available Ghostty terminal
+    # Reload config on all running Ghostty windows
     osascript -e '
         tell application "Ghostty"
             if (count of windows) > 0 then
-                perform action "reload_config" on terminal 1 of selected tab of first window
+                repeat with w in windows
+                    perform action "reload_config" on terminal 1 of selected tab of w
+                end repeat
             end if
         end tell
     ' &>/dev/null || true

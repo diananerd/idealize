@@ -334,7 +334,15 @@ else
         else
             echo "confirm-close-surface = false" >> "$ghostty_conf"
         fi
-        ok "confirm-close-surface = false"
+        # Reload running Ghostty windows so the change takes effect immediately
+        osascript -e 'tell application "Ghostty"
+            if (count of windows) > 0 then
+                repeat with w in windows
+                    perform action "reload_config" on terminal 1 of selected tab of w
+                end repeat
+            end if
+        end tell' &>/dev/null || true
+        ok "confirm-close-surface = false (applied)"
     else
         skip "close confirmation — kept as default"
     fi
