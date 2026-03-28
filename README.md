@@ -100,6 +100,7 @@ Please keep PRs focused (one feature or fix per PR). For larger changes, open an
 ## Documentation
 
 - [Design](docs/design.md) — architecture, pane layout, and IPC model
+- [Releasing](docs/releasing.md) — release channels, tagging, and workflow
 
 ## License
 
