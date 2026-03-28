@@ -70,7 +70,6 @@ case "$ACTION" in
             elif [[ -d "$LIB_DIR/../config" ]]; then
                 BROOT_CONF="$(cd "$LIB_DIR/../config" && pwd)/broot-sidebar.toml"
             fi
-            local shrink_restore step broot_socket
             shrink_restore=$(cfg_int "layout.tree_shrink_restore" "30")
             step=$(cfg_int "layout.resize_step" "10")
             broot_socket=$(cfg "broot_socket" "idealyze")
