@@ -29,6 +29,9 @@ on run argv
             set win to new window with configuration cfg
             set agentTerminal to terminal 1 of selected tab of win
 
+            -- Disable close confirmation for all panes in this window
+            perform action "config:confirm-close-surface=false" on agentTerminal
+
             set viewerTerminal to split agentTerminal direction left with configuration cfg
             set treeTerminal to split viewerTerminal direction left with configuration cfg
 
@@ -52,6 +55,9 @@ on run argv
             -- 2-pane: tree | viewer
             set win to new window with configuration cfg
             set viewerTerminal to terminal 1 of selected tab of win
+
+            -- Disable close confirmation for all panes in this window
+            perform action "config:confirm-close-surface=false" on viewerTerminal
 
             set treeTerminal to split viewerTerminal direction left with configuration cfg
 
