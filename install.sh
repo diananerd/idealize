@@ -10,7 +10,7 @@
 #
 # Interactive installer with dependency management, colored output, and smart defaults.
 
-set -euo pipefail
+set -eo pipefail
 
 REPO="diananerd/idealize"
 
@@ -165,9 +165,11 @@ done
 # --- Install missing required deps ---
 
 brew_installable=()
-for dep in "${MISSING_REQUIRED[@]}"; do
-    [[ "$dep" != "Ghostty" ]] && brew_installable+=("$dep")
-done
+if [[ ${#MISSING_REQUIRED[@]} -gt 0 ]]; then
+    for dep in "${MISSING_REQUIRED[@]}"; do
+        [[ "$dep" != "Ghostty" ]] && brew_installable+=("$dep")
+    done
+fi
 
 if [[ ${#brew_installable[@]} -gt 0 ]]; then
     echo ""
@@ -191,7 +193,7 @@ fi
 
 # --- Install missing optional deps ---
 
-if [[ ${#MISSING_OPTIONAL[@]} -gt 0 && "$HAS_BREW" == true ]]; then
+if [[ "${#MISSING_OPTIONAL[@]}" -gt 0 && "$HAS_BREW" == true ]]; then
     opt_default="n"
     [[ "$AUTO" == true ]] && opt_default="y"
     if ask_yn "Install optional dependencies? (${MISSING_OPTIONAL[*]})" "$opt_default"; then
