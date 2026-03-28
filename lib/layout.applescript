@@ -1,5 +1,5 @@
 -- lib/layout.applescript
--- Usage: osascript layout.applescript <project_dir> <lib_dir> <broot_conf> <agent_cmd> <shrink_count> <resize_step> <broot_socket>
+-- Usage: osascript layout.applescript <project_dir> <lib_dir> <broot_conf> <agent_cmd> <shrink_count> <resize_step> <broot_socket> [env_prefix]
 
 on run argv
     set projectDir to item 1 of argv
@@ -9,6 +9,10 @@ on run argv
     set shrinkCount to (item 5 of argv) as integer
     set resizeStep to (item 6 of argv) as integer
     set brootSocket to item 7 of argv
+    set envPrefix to ""
+    if (count of argv) > 7 then
+        set envPrefix to item 8 of argv
+    end if
 
     tell application "Ghostty"
         activate
@@ -36,7 +40,7 @@ on run argv
             set winId to id of win
 
             input text "broot --conf " & brootConf & " --listen " & brootSocket & " " & projectDir & "\n" to treeTerminal
-            input text libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
+            input text envPrefix & libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
             input text agentCmd & "\n" to agentTerminal
 
             return "{\"window_id\":\"" & (winId as text) & "\",\"tree_id\":\"" & (treeId as text) & "\",\"viewer_id\":\"" & (viewerId as text) & "\",\"agent_id\":\"" & (agentId as text) & "\"}"
@@ -56,7 +60,7 @@ on run argv
             set winId to id of win
 
             input text "broot --conf " & brootConf & " --listen " & brootSocket & " " & projectDir & "\n" to treeTerminal
-            input text libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
+            input text envPrefix & libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
 
             return "{\"window_id\":\"" & (winId as text) & "\",\"tree_id\":\"" & (treeId as text) & "\",\"viewer_id\":\"" & (viewerId as text) & "\",\"agent_id\":\"\"}"
         end if

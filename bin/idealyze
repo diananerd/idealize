@@ -361,9 +361,11 @@ launch() {
     # Run AppleScript layout
     local pane_json
     debug "running layout.applescript..."
+    local env_prefix=""
+    [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && env_prefix="IDEALYZE_DEBUG=1 "
     pane_json=$(osascript "${LIB_DIR}/layout.applescript" \
         "$project_dir" "$LIB_DIR" "${CONFIG_DIR}/broot-sidebar.toml" \
-        "$agent_cmd" "$shrink" "$step" "$broot_socket") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
+        "$agent_cmd" "$shrink" "$step" "$broot_socket" "$env_prefix") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
     debug "pane_json: $pane_json"
 
     # Build session.json

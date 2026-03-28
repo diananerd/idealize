@@ -21,37 +21,44 @@ debug() {
 
 # Current state
 CURRENT_CMD=""
+RENDER_REQUESTED=false
 
 render() {
     if [[ -n "$CURRENT_CMD" ]]; then
-        # Only allow commands matching: clear && [bat|glow|BAT_HIGHLIGHT_COLOR|H=]...
+        debug "render: ${CURRENT_CMD:0:80}"
         if [[ "$CURRENT_CMD" =~ ^clear\ \&\&\ (bat|glow|BAT_HIGHLIGHT_COLOR|H=) ]]; then
-            eval "$CURRENT_CMD" 2>/dev/null || true
+            eval "$CURRENT_CMD" 2>/dev/null || debug "render eval failed"
         else
-            debug "rejected command: ${CURRENT_CMD:0:80}"
+            debug "rejected: ${CURRENT_CMD:0:80}"
         fi
     fi
 }
 
-# Re-render on terminal resize
-trap 'render' WINCH
+on_winch() {
+    debug "WINCH received"
+    RENDER_REQUESTED=true
+}
 
-# Initialize command file
+# Re-render on terminal resize
+trap 'on_winch' WINCH
+
+# Cleanup on exit
+trap 'rm -f "${IDEALYZE_DIR}/viewer-loop.pid"; exit' EXIT INT TERM
+
+# Initialize
 mkdir -p "$IDEALYZE_DIR"
 : > "$CMD_FILE"
 
-# Store PID so toggles can send WINCH to force re-render
 echo $$ > "${IDEALYZE_DIR}/viewer-loop.pid"
-trap 'rm -f "${IDEALYZE_DIR}/viewer-loop.pid"; exit' EXIT INT TERM
-
-debug "viewer-loop started (pid=$$)"
+debug "viewer-loop started (pid=$$, pid_file=${IDEALYZE_DIR}/viewer-loop.pid)"
+debug "pid file exists: $(ls -la "${IDEALYZE_DIR}/viewer-loop.pid" 2>&1)"
 
 # Show initial file: prefer README, then first non-hidden file
 PROJECT_DIR="${1:-.}"
 initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f -iname 'readme*' 2>/dev/null | head -1)
 [[ -z "$initial_file" ]] && initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f ! -name '.*' 2>/dev/null | sort | head -1)
 if [[ -n "$initial_file" ]]; then
-    # Wait for pane dimensions to stabilize (layout applescript is resizing)
+    # Wait for pane dimensions to stabilize
     prev_cols=0
     for _ in $(seq 1 "$STABILIZE_RETRIES"); do
         cur_cols=$(tput cols 2>/dev/null || echo 0)
@@ -59,16 +66,17 @@ if [[ -n "$initial_file" ]]; then
         prev_cols="$cur_cols"
         sleep "$POLL_INTERVAL"
     done
+    debug "initial render: cols=$(tput cols 2>/dev/null) lines=$(tput lines 2>/dev/null) file=$initial_file"
     CURRENT_CMD="clear && bat --paging=never --wrap=auto --style=numbers,header,grid --color=always '${initial_file//\'/\'\\\'\'}'"
     render
 else
     echo "idealize: no files found in project root"
 fi
 
-# Poll for new commands from hooks
+# Main loop — poll for commands + handle deferred WINCH renders
 while true; do
+    # Check for new viewer command
     if [[ -f "$CMD_FILE" ]]; then
-        # Atomic read-and-clear: mv then read to avoid race conditions
         if mv "$CMD_FILE" "${CMD_FILE}.processing" 2>/dev/null; then
             new_cmd=$(cat "${CMD_FILE}.processing" 2>/dev/null)
             rm -f "${CMD_FILE}.processing"
@@ -76,8 +84,19 @@ while true; do
                 CURRENT_CMD="$new_cmd"
                 debug "new cmd: ${CURRENT_CMD:0:100}"
                 render
+                RENDER_REQUESTED=false
             fi
         fi
     fi
-    sleep "$POLL_INTERVAL"
+
+    # Handle deferred WINCH render (signal sets flag, loop does the render)
+    if [[ "$RENDER_REQUESTED" == true ]]; then
+        RENDER_REQUESTED=false
+        debug "deferred WINCH render: cols=$(tput cols 2>/dev/null)"
+        render
+    fi
+
+    # Interruptible sleep: use background sleep + wait so WINCH can wake us
+    sleep "$POLL_INTERVAL" &
+    wait $! 2>/dev/null || true
 done
