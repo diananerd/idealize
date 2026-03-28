@@ -11,7 +11,7 @@ Watch Claude Code work in real time — file tree, code viewer, and Claude side 
 └──────────┴────────────────────────┴──────────────┘
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh | sh
@@ -27,7 +27,7 @@ idealyze
 
 This opens a 3-pane Ghostty window with broot on the left, a code viewer in the center, and Claude Code on the right. As Claude reads, edits, and navigates files, the tree and viewer update instantly.
 
-## What You Get
+## ✨ What You Get
 
 - **Live file tracking** — every Read, Edit, Write, Glob, and Grep updates the tree and viewer
 - **Line highlighting** — the viewer jumps to the exact line Claude is working on
@@ -35,17 +35,20 @@ This opens a 3-pane Ghostty window with broot on the left, a code viewer in the 
 - **Collapsible tree** — hide the sidebar when you need more space
 - **Zero overhead when idle** — hooks exit in <1ms if no Idealize session is running
 
-## Commands
+## 💻 Commands
 
 | Command | What it does |
 |---|---|
 | `idealyze` | Launch the IDE layout in the current directory |
+| `idealyze --global` | Launch with global scope (track files outside the project too) |
 | `idealyze toggle tree` | Collapse or restore the file tree sidebar |
 | `idealyze toggle preview` | Switch the viewer between bat and glow |
 | `idealyze stop` | Close the session and clean up |
 | `idealyze uninstall` | Remove Idealize, its hooks, and all files |
 
-## How It Works
+Set `IDEALYZE_DEBUG=1` before launching to enable verbose logging to `~/.idealyze/debug.log`.
+
+## ⚙️ How It Works
 
 Idealize is event-driven. No background daemons besides a lightweight viewer loop.
 
@@ -55,7 +58,7 @@ Idealize is event-driven. No background daemons besides a lightweight viewer loo
 4. The hook updates broot via socket IPC and writes a render command to `~/.idealyze/viewer-cmd`
 5. The viewer loop picks up the command and re-renders bat/glow, including on terminal resize
 
-## Requirements
+## 📋 Requirements
 
 - macOS (uses AppleScript)
 - [Ghostty](https://ghostty.org) 1.3+
@@ -65,10 +68,15 @@ Idealize is event-driven. No background daemons besides a lightweight viewer loo
 - [jq](https://jqlang.github.io/jq/)
 - [glow](https://github.com/charmbracelet/glow) (optional, for markdown preview)
 
-## Contributing
+## 📖 Documentation
+
+- [Design](docs/design.md) — architecture, pane layout, and IPC model
+- [Plan](docs/plan.md) — roadmap and implementation plan
+
+## 🤝 Contributing
 
 Contributions are welcome! Feel free to open an issue or submit a pull request.
 
-## License
+## 📄 License
 
 MIT

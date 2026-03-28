@@ -27,10 +27,19 @@ cleanup_partial() {
     exit 1
 }
 
+trap cleanup_partial EXIT
+# Will be cleared on success at the end of the script
+
 download() {
     local url="$1" dest="$2"
-    if ! curl -fsSL "$url" -o "$dest"; then
-        fail "failed to download $(basename "$dest") from ${url}"
+    local http_code
+    http_code=$(curl -fsSL -w '%{http_code}' "$url" -o "$dest" 2>/dev/null) || true
+    if [[ ! -f "$dest" ]] || [[ "$http_code" != "200" ]]; then
+        fail "failed to download $(basename "$dest") from ${url} (HTTP ${http_code:-unknown})"
+    fi
+    # Guard against HTML error pages served with 200 (e.g. corporate proxies)
+    if head -1 "$dest" | grep -qi '<!doctype\|<html'; then
+        fail "downloaded $(basename "$dest") appears to be an HTML page, not the expected file — check your network/proxy"
     fi
 }
 
@@ -64,8 +73,6 @@ fi
 
 # --- Download ---
 
-trap cleanup_partial ERR
-
 echo "idealize: downloading files..."
 
 mkdir -p "$INSTALL_DIR"/{lib,config}
@@ -88,8 +95,6 @@ chmod +x "${INSTALL_DIR}"/lib/*.sh
 info "config/broot-sidebar.toml"
 download "${BASE_URL}/config/broot-sidebar.toml" "${INSTALL_DIR}/config/broot-sidebar.toml"
 
-trap - ERR
-
 # --- Configure Claude hooks ---
 
 echo "idealize: configuring Claude Code hooks..."
@@ -98,9 +103,17 @@ CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
 HOOK_CMD="idealyze --hook post-tool-use"
 
 if [[ -f "$CLAUDE_SETTINGS" ]]; then
-    if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command == "'"$HOOK_CMD"'")' "$CLAUDE_SETTINGS" &>/dev/null; then
+    # Validate existing JSON before touching it
+    if ! jq empty "$CLAUDE_SETTINGS" 2>/dev/null; then
+        warn "${CLAUDE_SETTINGS} contains invalid JSON — skipping hook configuration"
+        warn "fix the JSON manually, then re-run: curl -fsSL ${BASE_URL}/install.sh | sh"
+    elif jq -e --arg cmd "$HOOK_CMD" \
+        '.hooks.PostToolUse[]?.hooks[]? | select(.command == $cmd)' \
+        "$CLAUDE_SETTINGS" &>/dev/null; then
         info "hooks already configured — skipping"
     else
+        # Back up before modifying
+        cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak"
         if ! jq --arg cmd "$HOOK_CMD" '
             .hooks //= {} |
             .hooks.PostToolUse //= [] |
@@ -114,14 +127,14 @@ if [[ -f "$CLAUDE_SETTINGS" ]]; then
             }]
         ' "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp"; then
             rm -f "${CLAUDE_SETTINGS}.tmp"
-            fail "failed to update ${CLAUDE_SETTINGS}"
+            fail "failed to update ${CLAUDE_SETTINGS} (backup at ${CLAUDE_SETTINGS}.bak)"
         fi
         mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
-        info "hooks added to existing settings"
+        info "hooks added to existing settings (backup: settings.json.bak)"
     fi
 else
     mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
-    jq -n --arg cmd "$HOOK_CMD" '{
+    if ! jq -n --arg cmd "$HOOK_CMD" '{
         hooks: {
             PostToolUse: [{
                 matcher: "Read|Edit|Write|Glob|Grep",
@@ -132,7 +145,9 @@ else
                 }]
             }]
         }
-    }' > "$CLAUDE_SETTINGS"
+    }' > "$CLAUDE_SETTINGS"; then
+        fail "failed to create ${CLAUDE_SETTINGS}"
+    fi
     info "created ${CLAUDE_SETTINGS} with hooks"
 fi
 
@@ -173,6 +188,18 @@ if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
     echo "    export PATH=\"${BIN_DIR}:\$PATH\""
     echo ""
 fi
+
+# --- Post-install verification ---
+
+if [[ -x "${BIN_DIR}/idealyze" ]] && "${BIN_DIR}/idealyze" --version &>/dev/null; then
+    info "✓ idealyze binary works"
+else
+    warn "idealyze binary was installed but does not execute correctly"
+    warn "check ${BIN_DIR}/idealyze manually"
+fi
+
+# Clear cleanup trap — installation succeeded
+trap - EXIT
 
 echo ""
 if [[ "$ALL_OK" == true ]]; then

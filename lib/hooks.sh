@@ -9,19 +9,16 @@ SESSION_FILE="${IDEALYZE_DIR}/session.json"
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEBUG_LOG="${IDEALYZE_DIR}/debug.log"
 
-# Always log to debug file regardless of IDEALYZE_DEBUG
-echo "[hooks $(date +%H:%M:%S)] --- hook invoked ---" >> "$DEBUG_LOG"
+# Session guard: exit immediately if no active session (before any I/O)
+if [[ ! -f "$SESSION_FILE" ]]; then
+    exit 0
+fi
 
-# Debug helper — always log for now
+# Debug helper — always log (session exists so directory is guaranteed)
 debug() {
     echo "[hooks $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG"
 }
-
-# Session guard: exit immediately if no active session
-if [[ ! -f "$SESSION_FILE" ]]; then
-    debug "no session file, exiting"
-    exit 0
-fi
+debug "--- hook invoked ---"
 
 # Read session state (single jq call)
 read -r VIEWER_MODE VIEWER_ID PROJECT_DIR SCOPE < <(jq -r '[.viewer_mode // "bat", (.panes.viewer // "" | tostring), .project_dir // "", .scope // "project"] | @tsv' "$SESSION_FILE")
@@ -92,7 +89,6 @@ case "$TOOL_NAME" in
             FIRST_LINE=$(printf '%s' "$NEW_STRING" | head -1)
             LINE_NUMBER=$(grep -nF -- "$FIRST_LINE" "$FILE_PATH" 2>/dev/null | head -1 | cut -d: -f1 || true)
             # Count lines in new_string for multi-line highlight
-            local new_line_count
             new_line_count=$(printf '%s' "$NEW_STRING" | wc -l | tr -d ' ')
             if [[ -n "$LINE_NUMBER" && "$new_line_count" -gt 1 ]]; then
                 LINE_END=$(( LINE_NUMBER + new_line_count ))

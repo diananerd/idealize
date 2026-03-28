@@ -11,7 +11,7 @@ TARGET="${2:-}"
 DEBUG_LOG="${HOME}/.idealyze/debug.log"
 
 debug() {
-    echo "[tree  $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG"
+    [[ -d "${HOME}/.idealyze" ]] && echo "[tree  $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG" || true
 }
 
 if [[ -z "$ACTION" || -z "$TARGET" ]]; then

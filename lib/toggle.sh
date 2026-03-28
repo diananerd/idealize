@@ -39,9 +39,15 @@ case "$ACTION" in
                         perform action \"resize_split:left,20\" on viewerTerm
                     end repeat
                 end tell
-            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || debug "osascript failed: $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null)"
-            jq '.tree_visible = false' "$SESSION_FILE" > "${SESSION_FILE}.tmp" \
-                && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || {
+                echo "idealize: failed to collapse tree — $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null || echo 'unknown osascript error')" >&2
+                exit 1
+            }
+            if ! jq '.tree_visible = false' "$SESSION_FILE" > "${SESSION_FILE}.tmp"; then
+                echo "idealize: failed to update session file" >&2
+                exit 1
+            fi
+            mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: tree collapsed"
         else
             debug "restoring tree"
@@ -52,15 +58,29 @@ case "$ACTION" in
                         perform action \"resize_split:right,20\" on viewerTerm
                     end repeat
                 end tell
-            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || debug "osascript failed: $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null)"
-            jq '.tree_visible = true' "$SESSION_FILE" > "${SESSION_FILE}.tmp" \
-                && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || {
+                echo "idealize: failed to restore tree — $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null || echo 'unknown osascript error')" >&2
+                exit 1
+            }
+            if ! jq '.tree_visible = true' "$SESSION_FILE" > "${SESSION_FILE}.tmp"; then
+                echo "idealize: failed to update session file" >&2
+                exit 1
+            fi
+            mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: tree restored"
         fi
         ;;
 
     preview)
-        read -r CURRENT_MODE CURRENT_FILE CURRENT_LINE VIEWER_ID < <(jq -r '[.viewer_mode, (.current_file // ""), (.current_line // 1 | tostring), (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
+        read -r CURRENT_MODE VIEWER_ID < <(jq -r '[.viewer_mode, (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
+        # Read current file/line from the IPC file (hooks.sh writes here, not session.json)
+        CURRENT_FILE=""
+        CURRENT_LINE="1"
+        if [[ -f "${IDEALYZE_DIR}/current-file" ]]; then
+            CURRENT_FILE=$(sed -n '1p' "${IDEALYZE_DIR}/current-file")
+            CURRENT_LINE=$(sed -n '2p' "${IDEALYZE_DIR}/current-file")
+            CURRENT_LINE="${CURRENT_LINE:-1}"
+        fi
         debug "mode=$CURRENT_MODE file=$CURRENT_FILE line=$CURRENT_LINE viewer_id=$VIEWER_ID"
 
         # Validate VIEWER_ID
@@ -72,8 +92,11 @@ case "$ACTION" in
             NEW_MODE="bat"
         fi
 
-        jq --arg m "$NEW_MODE" '.viewer_mode = $m' "$SESSION_FILE" > "${SESSION_FILE}.tmp" \
-            && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+        if ! jq --arg m "$NEW_MODE" '.viewer_mode = $m' "$SESSION_FILE" > "${SESSION_FILE}.tmp"; then
+            echo "idealize: failed to update viewer mode in session" >&2
+            exit 1
+        fi
+        mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
 
         # Re-render current file with new mode if one is active
         if [[ -n "$CURRENT_FILE" && -f "$CURRENT_FILE" ]]; then
@@ -86,7 +109,10 @@ case "$ACTION" in
                         set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
                         input text \"${ESCAPED_CMD}\n\" to viewerTerm
                     end tell
-                " 2>"${IDEALYZE_DIR}/osascript-error.log" || debug "osascript failed: $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null)"
+                " 2>"${IDEALYZE_DIR}/osascript-error.log" || {
+                    echo "idealize: failed to send viewer command — $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null || echo 'unknown osascript error')" >&2
+                    exit 1
+                }
             fi
         fi
 
