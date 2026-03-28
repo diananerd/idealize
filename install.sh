@@ -314,6 +314,27 @@ else
     skip "hooks — skipped (you can configure them manually later)"
 fi
 
+# --- Ghostty config ---
+
+header "Ghostty configuration"
+
+ghostty_conf="${HOME}/.config/ghostty/config"
+if [[ -f "$ghostty_conf" ]] && grep -q 'confirm-close-surface.*=.*false' "$ghostty_conf"; then
+    ok "close confirmation already disabled"
+else
+    if ask_yn "Disable Ghostty close confirmation for smoother experience?" "y"; then
+        mkdir -p "$(dirname "$ghostty_conf")"
+        if [[ -f "$ghostty_conf" ]] && grep -q 'confirm-close-surface' "$ghostty_conf"; then
+            sed -i '' 's/^confirm-close-surface.*/confirm-close-surface = false/' "$ghostty_conf"
+        else
+            echo "confirm-close-surface = false" >> "$ghostty_conf"
+        fi
+        ok "confirm-close-surface = false"
+    else
+        skip "close confirmation — kept as default"
+    fi
+fi
+
 # --- PATH check ---
 
 if [[ "$INSTALL_MODE" == "user" && ":$PATH:" != *":${BIN_DIR}:"* ]]; then

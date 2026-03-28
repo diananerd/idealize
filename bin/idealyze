@@ -57,6 +57,39 @@ Optional: glow (markdown preview)
 EOF
 }
 
+# --- Ghostty config helpers ---
+
+ghostty_config_set() {
+    local key="$1" value="$2"
+    local conf="${HOME}/.config/ghostty/config"
+    mkdir -p "$(dirname "$conf")"
+    if [[ -f "$conf" ]] && grep -q "^${key}" "$conf"; then
+        sed -i '' "s/^${key}.*/${key} = ${value}/" "$conf"
+    else
+        echo "${key} = ${value}" >> "$conf"
+    fi
+}
+
+ghostty_config_remove() {
+    local key="$1"
+    local conf="${HOME}/.config/ghostty/config"
+    [[ -f "$conf" ]] || return 0
+    sed -i '' "/^${key}/d" "$conf"
+    # Remove file if empty
+    [[ -s "$conf" ]] || rm -f "$conf"
+}
+
+ghostty_reload() {
+    # Reload config on any available Ghostty terminal
+    osascript -e '
+        tell application "Ghostty"
+            if (count of windows) > 0 then
+                perform action "reload_config" on terminal 1 of selected tab of first window
+            end if
+        end tell
+    ' &>/dev/null || true
+}
+
 check_deps() {
     local missing=()
     command -v osascript &>/dev/null || missing+=("osascript (macOS)")
@@ -167,12 +200,30 @@ doctor() {
         all_ok=false
     fi
 
+    # --- Ghostty config ---
+    echo -e "\n${B}Ghostty config${N}"
+    local ghostty_conf="${HOME}/.config/ghostty/config"
+    if [[ -f "$ghostty_conf" ]] && grep -q 'confirm-close-surface.*=.*false' "$ghostty_conf"; then
+        echo -e "  ${ok}  confirm-close-surface = false"
+    else
+        echo -e "  ${opt}  confirm-close-surface not disabled ${D}(idealize will ask before closing panes)${N}"
+        echo ""
+        echo -en "  ${C}?${N} Disable close confirmation in Ghostty? ${D}[y/N]${N} "
+        local reply=""
+        read -r reply </dev/tty 2>/dev/null || read -r reply 2>/dev/null || reply=""
+        if [[ "$reply" =~ ^[Yy] ]]; then
+            ghostty_config_set "confirm-close-surface" "false"
+            ghostty_reload
+            echo -e "  ${ok}  confirm-close-surface = false ${D}(applied)${N}"
+        fi
+    fi
+
     # --- Autofix ---
     if [[ ${#missing_req[@]} -gt 0 && "$has_brew" == true ]]; then
         echo ""
         echo -en "  ${C}?${N} Install missing required deps via brew? (${missing_req[*]}) ${D}[Y/n]${N} "
         local reply
-        read -r reply </dev/tty 2>/dev/null || reply=""
+        read -r reply </dev/tty 2>/dev/null || read -r reply 2>/dev/null || reply=""
         reply="${reply:-y}"
         if [[ "$reply" =~ ^[Yy] ]]; then
             for dep in "${missing_req[@]}"; do
@@ -190,7 +241,7 @@ doctor() {
         echo ""
         echo -en "  ${C}?${N} Install optional deps? (${missing_opt[*]}) ${D}[y/N]${N} "
         local reply
-        read -r reply </dev/tty 2>/dev/null || reply=""
+        read -r reply </dev/tty 2>/dev/null || read -r reply 2>/dev/null || reply=""
         reply="${reply:-n}"
         if [[ "$reply" =~ ^[Yy] ]]; then
             for dep in "${missing_opt[@]}"; do
@@ -321,53 +372,119 @@ stop_session() {
 }
 
 uninstall() {
-    if [[ "${1:-}" != "--yes" ]]; then
-        printf "idealize: remove all files and hooks? [y/N] "
-        read -r confirm
-        [[ "$confirm" =~ ^[Yy]$ ]] || { echo "idealize: cancelled"; exit 0; }
-    fi
+    local B='\033[1m' D='\033[2m' G='\033[32m' Y='\033[33m' R='\033[31m' C='\033[36m' N='\033[0m'
+    [[ ! -t 1 ]] && B='' D='' G='' Y='' R='' C='' N=''
+    local ok="${G}ok${N}" skip="${D}--${N}"
 
-    echo "idealize: uninstalling..."
+    local auto=false
+    [[ "${1:-}" == "--yes" ]] && auto=true
 
-    # Remove hooks from Claude settings
-    local claude_settings="${HOME}/.claude/settings.json"
-    if [[ -f "$claude_settings" ]]; then
-        jq 'if .hooks.PostToolUse then
-            .hooks.PostToolUse |= map(
-                select(.hooks | all(.command | test("idealyze|idealize|hooks\\.sh") | not))
-            ) |
-            if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end |
-            if .hooks | length == 0 then del(.hooks) else . end
-        else . end' "$claude_settings" > "${claude_settings}.tmp" \
-            && mv "${claude_settings}.tmp" "$claude_settings"
-        echo "  removed hooks from ${claude_settings}"
-    fi
+    echo -e "\n${B}idealize uninstall${N}\n"
 
-    # Detect install mode from metadata
-    local install_meta="${IDEALYZE_HOME}/.install-meta"
+    # Detect install mode
     local install_mode="user"
     local bin_dir="${HOME}/.local/bin"
-    if [[ -f "$install_meta" ]]; then
-        install_mode=$(grep '^mode=' "$install_meta" | cut -d= -f2)
-        bin_dir=$(grep '^bin_dir=' "$install_meta" | cut -d= -f2)
-    fi
+    local home_dir="$IDEALYZE_HOME"
 
-    # Also check for project-level install in cwd
     if [[ -d "$(pwd)/.idealyze" && -f "$(pwd)/.idealyze/.install-meta" ]]; then
         install_mode="project"
-        IDEALYZE_HOME="$(pwd)/.idealyze"
+        home_dir="$(pwd)/.idealyze"
         bin_dir=$(grep '^bin_dir=' "$(pwd)/.idealyze/.install-meta" | cut -d= -f2)
+    elif [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
+        install_mode=$(grep '^mode=' "${IDEALYZE_HOME}/.install-meta" | cut -d= -f2)
+        bin_dir=$(grep '^bin_dir=' "${IDEALYZE_HOME}/.install-meta" | cut -d= -f2)
     fi
 
-    rm -rf "$IDEALYZE_HOME"
-    echo "  removed ${IDEALYZE_HOME}"
+    echo -e "  ${D}install mode:${N} ${install_mode}"
+    echo -e "  ${D}install dir:${N}  ${home_dir}"
+    [[ -n "$bin_dir" ]] && echo -e "  ${D}binary:${N}       ${bin_dir}/idealyze"
+    echo ""
 
+    if [[ "$auto" != true ]]; then
+        echo -en "  ${C}?${N} Remove idealize and all its configuration? ${D}[y/N]${N} "
+        local confirm
+        read -r confirm
+        [[ "$confirm" =~ ^[Yy]$ ]] || { echo -e "\n  cancelled"; exit 0; }
+        echo ""
+    fi
+
+    # --- Stop active session ---
+    if [[ -f "${home_dir}/session.json" ]]; then
+        echo -e "  ${C}>${N} stopping active session..."
+        local win_id
+        win_id=$(jq -r '.panes.window // empty' "${home_dir}/session.json" 2>/dev/null)
+        if [[ -n "$win_id" ]]; then
+            osascript -e "
+                tell application \"Ghostty\"
+                    try
+                        set w to first window whose id is \"${win_id}\"
+                        perform action \"close_window\" on terminal 1 of selected tab of w
+                    end try
+                end tell
+            " &>/dev/null || true
+        fi
+        rm -f "/tmp/broot-server-idealyze.sock"
+        echo -e "  ${ok}  session stopped"
+    fi
+
+    # --- Remove hooks from Claude settings ---
+    local claude_settings="${HOME}/.claude/settings.json"
+    if [[ -f "$claude_settings" ]]; then
+        if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command | test("idealyze|idealize|hooks\\.sh"))' "$claude_settings" &>/dev/null; then
+            cp "$claude_settings" "${claude_settings}.bak"
+            jq 'if .hooks.PostToolUse then
+                .hooks.PostToolUse |= map(
+                    select(.hooks | all(.command | test("idealyze|idealize|hooks\\.sh") | not))
+                ) |
+                if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end |
+                if .hooks | length == 0 then del(.hooks) else . end
+            else . end' "$claude_settings" > "${claude_settings}.tmp" \
+                && mv "${claude_settings}.tmp" "$claude_settings"
+            echo -e "  ${ok}  removed hooks from settings.json ${D}(backup: settings.json.bak)${N}"
+        else
+            echo -e "  ${skip}  no hooks to remove"
+        fi
+    else
+        echo -e "  ${skip}  no Claude settings found"
+    fi
+
+    # --- Revert Ghostty config ---
+    local ghostty_conf="${HOME}/.config/ghostty/config"
+    if [[ -f "$ghostty_conf" ]] && grep -q 'confirm-close-surface' "$ghostty_conf"; then
+        local revert_ghostty=false
+        if [[ "$auto" == true ]]; then
+            revert_ghostty=true
+        else
+            echo -en "  ${C}?${N} Restore Ghostty close confirmation? ${D}[Y/n]${N} "
+            local reply
+            read -r reply
+            reply="${reply:-y}"
+            [[ "$reply" =~ ^[Yy] ]] && revert_ghostty=true
+        fi
+        if [[ "$revert_ghostty" == true ]]; then
+            ghostty_config_remove "confirm-close-surface"
+            ghostty_reload
+            echo -e "  ${ok}  restored Ghostty close confirmation"
+        else
+            echo -e "  ${skip}  kept Ghostty config as-is"
+        fi
+    fi
+
+    # --- Remove install directory ---
+    if [[ -d "$home_dir" ]]; then
+        rm -rf "$home_dir"
+        echo -e "  ${ok}  removed ${home_dir}"
+    else
+        echo -e "  ${skip}  ${home_dir} not found"
+    fi
+
+    # --- Remove binary ---
     if [[ -n "$bin_dir" && -f "${bin_dir}/idealyze" ]]; then
         rm -f "${bin_dir}/idealyze"
-        echo "  removed ${bin_dir}/idealyze"
+        echo -e "  ${ok}  removed ${bin_dir}/idealyze"
     fi
 
-    echo "idealize: uninstalled (${install_mode} mode)"
+    echo -e "\n  ${G}${B}Uninstalled${N} ${D}(${install_mode} mode)${N}\n"
 }
 
 # --- Main ---
