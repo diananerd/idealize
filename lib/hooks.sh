@@ -29,12 +29,14 @@ debug "session: viewer_mode=$VIEWER_MODE viewer_id=$VIEWER_ID project_dir=$PROJE
 
 if [[ -z "$VIEWER_ID" ]]; then
     debug "empty VIEWER_ID, exiting"
+    echo "idealize: hook skipped — no viewer pane in session" >&2
     exit 0
 fi
 
 # Validate VIEWER_ID is alphanumeric/UUID to prevent AppleScript injection
 if [[ ! "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
     debug "invalid VIEWER_ID: $VIEWER_ID"
+    echo "idealize: hook skipped — invalid viewer ID in session" >&2
     exit 0
 fi
 
@@ -45,6 +47,7 @@ debug "stdin: ${HOOK_JSON:0:500}"
 TOOL_NAME=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_name // empty')
 if [[ -z "$TOOL_NAME" ]]; then
     debug "no tool_name in JSON, exiting"
+    echo "idealize: hook skipped — no tool_name in hook JSON" >&2
     exit 0
 fi
 debug "tool: $TOOL_NAME"
@@ -66,7 +69,6 @@ LINE_NUMBER=""
 case "$TOOL_NAME" in
     Read)
         FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
-        local read_offset read_limit
         read_offset=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.offset // 0')
         read_limit=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.limit // 0')
         if [[ "$read_offset" =~ ^[0-9]+$ && "$read_offset" -gt 0 ]]; then
@@ -125,8 +127,13 @@ case "$TOOL_NAME" in
         ;;
 esac
 
-if [[ -z "$FILE_PATH" || ! -f "$FILE_PATH" ]]; then
-    debug "file not found or empty: $FILE_PATH"
+if [[ -z "$FILE_PATH" ]]; then
+    debug "empty file path from tool"
+    exit 0
+fi
+if [[ ! -f "$FILE_PATH" ]]; then
+    debug "file not found: $FILE_PATH"
+    echo "idealize: hook skipped — file not found: $FILE_PATH" >&2
     exit 0
 fi
 

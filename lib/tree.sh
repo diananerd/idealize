@@ -15,14 +15,15 @@ debug() {
 }
 
 if [[ -z "$ACTION" || -z "$TARGET" ]]; then
-    debug "missing action or target, exiting"
-    exit 0
+    echo "idealize: tree.sh requires action and target arguments" >&2
+    exit 1
 fi
 
 # Check if broot socket exists
 if [[ ! -S "/tmp/broot-server-${SOCKET_NAME}.sock" ]]; then
     debug "socket not found: /tmp/broot-server-${SOCKET_NAME}.sock"
-    exit 0
+    echo "idealize: broot sidebar not running (socket not found)" >&2
+    exit 1
 fi
 
 debug "action=$ACTION target=$TARGET"
@@ -31,14 +32,14 @@ case "$ACTION" in
     select)
         filename=$(basename "$TARGET")
         debug "broot --send $SOCKET_NAME -c ':escape;${filename}'"
-        broot --send "$SOCKET_NAME" -c ":escape;${filename}" 2>>"$DEBUG_LOG" || debug "broot send failed"
+        broot --send "$SOCKET_NAME" -c ":escape;${filename}" 2>>"$DEBUG_LOG" || { echo "idealize: broot select failed for $TARGET" >&2; exit 1; }
         ;;
     focus)
         debug "broot --send $SOCKET_NAME -c ':focus ${TARGET}'"
-        broot --send "$SOCKET_NAME" -c ":focus ${TARGET}" 2>>"$DEBUG_LOG" || debug "broot send failed"
+        broot --send "$SOCKET_NAME" -c ":focus ${TARGET}" 2>>"$DEBUG_LOG" || { echo "idealize: broot focus failed for $TARGET" >&2; exit 1; }
         ;;
     *)
-        debug "unknown action: $ACTION"
-        exit 0
+        echo "idealize: tree.sh unknown action: $ACTION (expected: select|focus)" >&2
+        exit 1
         ;;
 esac

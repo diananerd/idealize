@@ -2,7 +2,7 @@
 # lib/viewer-loop.sh — Persistent viewer process for the read pane
 # Watches ~/.idealyze/viewer-cmd for new commands and re-renders on resize (SIGWINCH).
 
-set -uo pipefail
+set -euo pipefail
 
 IDEALYZE_DIR="${HOME}/.idealyze"
 CMD_FILE="${IDEALYZE_DIR}/viewer-cmd"
@@ -17,7 +17,13 @@ CURRENT_CMD=""
 
 render() {
     if [[ -n "$CURRENT_CMD" ]]; then
-        eval "$CURRENT_CMD"
+        # Only allow commands starting with known safe prefixes
+        if [[ "$CURRENT_CMD" == clear* ]]; then
+            eval "$CURRENT_CMD" || echo "idealize: viewer render failed" >&2
+        else
+            debug "rejected unsafe command: ${CURRENT_CMD:0:80}"
+            echo "idealize: viewer rejected unexpected command format" >&2
+        fi
     fi
 }
 
@@ -40,6 +46,9 @@ if [[ -n "$initial_file" ]]; then
 else
     echo "idealize: no files found in project root"
 fi
+
+# Disable errexit for the loop — individual render failures should not kill the viewer
+set +e
 
 # Poll for new commands from hooks
 while true; do

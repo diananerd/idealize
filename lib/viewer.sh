@@ -17,14 +17,14 @@ debug() {
 debug "file=$FILE_PATH line=$LINE_NUMBER mode=$VIEWER_MODE"
 
 if [[ -z "$FILE_PATH" ]]; then
-    debug "empty file path, exiting"
-    exit 0
+    echo "idealize: viewer.sh requires a file path argument" >&2
+    exit 1
 fi
 
 # Check if file exists
 if [[ ! -f "$FILE_PATH" ]]; then
-    debug "file not found: $FILE_PATH"
-    exit 0
+    echo "idealize: viewer.sh file not found: $FILE_PATH" >&2
+    exit 1
 fi
 
 FILE_EXT="${FILE_PATH##*.}"
@@ -40,11 +40,15 @@ fi
 # Validate LINE_NUMBER is numeric to prevent injection in arithmetic
 [[ "$LINE_NUMBER" =~ ^[0-9]+$ ]] || LINE_NUMBER=""
 
-BAT="BAT_HIGHLIGHT_COLOR='#3a3a6a' bat --paging=never --style=numbers,header,grid --color=always"
+BAT="bat --paging=never --style=numbers,header,grid --color=always"
+
+# Boost bat's highlight color from dim gray (51,51,51) to vivid blue (40,40,160)
+# Must replace both "48;2;51;51;51;" (bg+fg combined) and "48;2;51;51;51m" (bg only)
+BOOST="sed $'s/48;2;51;51;51/48;2;40;40;160/g'"
 
 if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
-    # Terminal-height window centered on the target line, computed at render time
-    CMD="clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${LINE_NUMBER} --line-range \${S}:\${E} \"${FILE_PATH}\""
+    # Terminal-height window centered on the target line
+    CMD="clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${LINE_NUMBER} --line-range \${S}:\${E} \"${FILE_PATH}\" | ${BOOST}"
 else
     # No specific line — show from top, capped to terminal height
     CMD="clear && ${BAT} --line-range 1:\$(tput lines) \"${FILE_PATH}\""
