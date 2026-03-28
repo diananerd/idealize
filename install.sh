@@ -49,13 +49,15 @@ missing() { echo -e "  ${RED}!!${RESET}  $*"; }
 warn()    { echo -e "  ${YELLOW}!!${RESET}  $*"; }
 fail()    { echo -e "\n${RED}error:${RESET} $*" >&2; exit 1; }
 
+_has_tty() { [[ -t 0 ]] || [[ -c /dev/tty ]]; }
+
 ask() {
     local prompt="$1" default="${2:-}" reply
-    if [[ "$AUTO" == true ]]; then echo "$default"; return; fi
+    if [[ "$AUTO" == true ]] || ! _has_tty; then echo "$default"; return; fi
     if [[ -n "$default" ]]; then
-        echo -en "  ${CYAN}?${RESET} ${prompt} ${DIM}[${default}]${RESET} "
+        echo -en "  ${CYAN}?${RESET} ${prompt} ${DIM}[${default}]${RESET} " >&2
     else
-        echo -en "  ${CYAN}?${RESET} ${prompt} "
+        echo -en "  ${CYAN}?${RESET} ${prompt} " >&2
     fi
     read -r reply </dev/tty 2>/dev/null || reply=""
     echo "${reply:-$default}"
@@ -63,11 +65,11 @@ ask() {
 
 ask_yn() {
     local prompt="$1" default="${2:-y}" reply
-    if [[ "$AUTO" == true ]]; then [[ "$default" == "y" ]]; return; fi
+    if [[ "$AUTO" == true ]] || ! _has_tty; then [[ "$default" == "y" ]]; return; fi
     if [[ "$default" == "y" ]]; then
-        echo -en "  ${CYAN}?${RESET} ${prompt} ${DIM}[Y/n]${RESET} "
+        echo -en "  ${CYAN}?${RESET} ${prompt} ${DIM}[Y/n]${RESET} " >&2
     else
-        echo -en "  ${CYAN}?${RESET} ${prompt} ${DIM}[y/N]${RESET} "
+        echo -en "  ${CYAN}?${RESET} ${prompt} ${DIM}[y/N]${RESET} " >&2
     fi
     read -r reply </dev/tty 2>/dev/null || reply=""
     reply="${reply:-$default}"
@@ -93,22 +95,30 @@ header "Install location"
 
 if [[ "${1:-}" == "--project" ]]; then
     INSTALL_MODE="project"
-elif [[ "${1:-}" == "--user" ]]; then
+elif [[ "${1:-}" == "--user" ]] || [[ "$AUTO" == true ]]; then
     INSTALL_MODE="user"
 else
-    mode_choice=$(ask "Install for current user or this project? (user/project)" "user")
-    INSTALL_MODE="${mode_choice}"
+    echo ""
+    echo -e "  ${BOLD}1${RESET}) User install ${DIM}— available everywhere (~/.idealyze)${RESET}"
+    echo -e "  ${BOLD}2${RESET}) Project install ${DIM}— this directory only (.idealyze/)${RESET}"
+    echo ""
+    mode_choice=$(ask "Choose [1/2]" "1")
+    if [[ "$mode_choice" == "2" ]]; then
+        INSTALL_MODE="project"
+    else
+        INSTALL_MODE="user"
+    fi
 fi
 
 if [[ "$INSTALL_MODE" == "project" ]]; then
     INSTALL_DIR="$(pwd)/.idealyze"
     BIN_DIR="$(pwd)/.idealyze/bin"
-    step "project mode: ${BOLD}${INSTALL_DIR}${RESET}"
+    step "project: ${BOLD}${INSTALL_DIR}${RESET}"
 else
     INSTALL_MODE="user"
     INSTALL_DIR="${HOME}/.idealyze"
     BIN_DIR="${HOME}/.local/bin"
-    step "user mode: ${BOLD}${INSTALL_DIR}${RESET}"
+    step "user: ${BOLD}${INSTALL_DIR}${RESET}"
 fi
 
 # Writable check
@@ -299,7 +309,7 @@ source "${INSTALL_DIR}/lib/providers/claude-code.sh"
 
 if provider_is_installed; then
     ok "$(provider_name) detected"
-    if ask_yn "Configure $(provider_name) hooks?" "y"; then
+    if ask_yn "Set up $(provider_name) integration? (enables live file tracking)" "y"; then
         HOOK_CMD="bash ${INSTALL_DIR}/lib/hooks.sh"
         if [[ "$INSTALL_MODE" == "project" && -d ".claude" ]]; then
             hook_mode="project"
@@ -327,7 +337,7 @@ ghostty_conf="${HOME}/.config/ghostty/config"
 if [[ -f "$ghostty_conf" ]] && grep -q 'confirm-close-surface.*=.*false' "$ghostty_conf"; then
     ok "close confirmation already disabled"
 else
-    if ask_yn "Disable Ghostty close confirmation for smoother experience?" "y"; then
+    if ask_yn "Disable close confirmation in Ghostty? (recommended for toggling panes)" "y"; then
         mkdir -p "$(dirname "$ghostty_conf")"
         if [[ -f "$ghostty_conf" ]] && grep -q 'confirm-close-surface' "$ghostty_conf"; then
             sed -i '' 's/^confirm-close-surface.*/confirm-close-surface = false/' "$ghostty_conf"
