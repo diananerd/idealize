@@ -42,28 +42,45 @@ case "$ACTION" in
         TREE_VISIBLE=$(jq -r '.tree_visible' "$SESSION_FILE")
         TREE_ID=$(jq -r '.panes.tree // ""' "$SESSION_FILE")
         VIEWER_ID=$(jq -r '.panes.viewer // ""' "$SESSION_FILE")
+        WIN_ID=$(jq -r '.panes.window // ""' "$SESSION_FILE")
         PROJECT_DIR=$(jq -r '.project_dir // ""' "$SESSION_FILE")
-        debug "tree_visible=$TREE_VISIBLE tree_id=$TREE_ID viewer_id=$VIEWER_ID"
+        debug "tree_visible=$TREE_VISIBLE tree_id=$TREE_ID viewer_id=$VIEWER_ID win=$WIN_ID"
 
-        [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
+        [[ "$WIN_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session (no window)" >&2; exit 1; }
 
         if [[ "$TREE_VISIBLE" == "true" ]]; then
-            # Close the tree pane
             debug "closing tree pane"
             [[ "$TREE_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid tree id" >&2; exit 1; }
-            osascript -e "
+            # Close tree, then re-read viewer ID from Ghostty (IDs may change after close)
+            NEW_VIEWER_ID=$(osascript -e "
                 tell application \"Ghostty\"
                     set treeTerm to first terminal whose id is \"${TREE_ID}\"
                     perform action \"close_surface\" on treeTerm
+                    delay 0.3
+                    set w to first window whose id is \"${WIN_ID}\"
+                    return id of terminal 1 of selected tab of w
                 end tell
-            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
-            jq '.tree_visible = false | .panes.tree = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            " 2>"${IDEALYZE_DIR}/osascript-error.log") || true
+            debug "new viewer_id after tree close: $NEW_VIEWER_ID"
+            if [[ -n "$NEW_VIEWER_ID" ]]; then
+                jq --arg v "$NEW_VIEWER_ID" '.tree_visible = false | .panes.tree = "" | .panes.viewer = $v' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            else
+                jq '.tree_visible = false | .panes.tree = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            fi
             echo "idealize: tree hidden"
             notify_viewer_resize
         else
-            # Re-create tree pane by splitting left from viewer
             debug "re-creating tree pane"
-            # Resolve broot config path
+            # Re-read viewer ID fresh from Ghostty
+            VIEWER_ID=$(osascript -e "
+                tell application \"Ghostty\"
+                    set w to first window whose id is \"${WIN_ID}\"
+                    return id of terminal 1 of selected tab of w
+                end tell
+            " 2>/dev/null) || true
+            debug "fresh viewer_id: $VIEWER_ID"
+            [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: cannot find viewer pane" >&2; exit 1; }
+
             BROOT_CONF=""
             if [[ -f "${IDEALYZE_DIR}/config/broot-sidebar.toml" ]]; then
                 BROOT_CONF="${IDEALYZE_DIR}/config/broot-sidebar.toml"
@@ -73,7 +90,7 @@ case "$ACTION" in
             shrink_restore=$(cfg_int "layout.tree_shrink_restore" "30")
             step=$(cfg_int "layout.resize_step" "10")
             broot_socket=$(cfg "broot_socket" "idealyze")
-            NEW_TREE_ID=$(osascript -e "
+            RESULT=$(osascript -e "
                 tell application \"Ghostty\"
                     set cfg to new surface configuration
                     set initial working directory of cfg to \"${PROJECT_DIR}\"
@@ -83,13 +100,15 @@ case "$ACTION" in
                         perform action \"resize_split:left,${step}\" on treeTerm
                     end repeat
                     input text \"broot --conf ${BROOT_CONF} --listen ${broot_socket} ${PROJECT_DIR}\n\" to treeTerm
-                    return id of treeTerm
+                    return (id of treeTerm) & \"|\" & (id of viewerTerm)
                 end tell
             " 2>"${IDEALYZE_DIR}/osascript-error.log") || {
                 echo "idealize: failed to restore tree" >&2; exit 1
             }
-            debug "new tree_id=$NEW_TREE_ID"
-            jq --arg t "$NEW_TREE_ID" '.tree_visible = true | .panes.tree = $t' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            NEW_TREE_ID="${RESULT%%|*}"
+            NEW_VIEWER_ID="${RESULT##*|}"
+            debug "new tree_id=$NEW_TREE_ID viewer_id=$NEW_VIEWER_ID"
+            jq --arg t "$NEW_TREE_ID" --arg v "$NEW_VIEWER_ID" '.tree_visible = true | .panes.tree = $t | .panes.viewer = $v' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: tree restored"
             notify_viewer_resize
         fi
