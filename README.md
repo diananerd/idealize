@@ -14,7 +14,7 @@ Watch Claude Code work in real time — file tree and code viewer side by side i
 ## Quick Start
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh)
+bash <(curl -fsSL https://idealize.diananerd.com/install)
 ```
 
 The installer downloads Idealize to `~/.local/bin/`, configures a `PostToolUse` hook in `~/.claude/settings.json`, and checks your dependencies.
@@ -78,13 +78,13 @@ Idealize is event-driven. No background daemons besides a lightweight viewer loo
 The default install always pulls from the `latest` tag (stable):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/latest/install.sh)
+bash <(curl -fsSL https://idealize.diananerd.com/install)
 ```
 
 To try pre-release features:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/beta/install.sh) --beta
+bash <(curl -fsSL https://idealize.diananerd.com/install?channel=beta) --beta
 ```
 
 ## Contributing
