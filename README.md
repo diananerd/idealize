@@ -11,13 +11,15 @@ A terminal IDE companion for AI coding agents. Watch your agent work in real tim
 └──────────┴─────────────────────────────────────┘
 ```
 
+When your AI agent reads a file, the viewer shows it with syntax highlighting. When it edits a line, the viewer scrolls to the exact line and highlights the change. The file tree tracks which file is active. All of this happens automatically — you just watch.
+
 ## Quick Start
 
 ```bash
 bash <(curl -fsSL https://idealize.diananerd.com/install.sh)
 ```
 
-The installer checks dependencies (installs missing ones via brew), downloads Idealize to `~/.idealyze/`, and configures hooks. Run with `--auto` to skip prompts.
+The installer walks you through everything: checks your system, installs missing dependencies via brew, downloads Idealize, configures agent hooks, and sets up Ghostty. Add `--auto` to skip prompts and install everything.
 
 Then, from any project directory:
 
@@ -25,18 +27,26 @@ Then, from any project directory:
 idealyze
 ```
 
-This opens a 2-pane Ghostty window: broot file tree on the left and a code viewer on the right. As your agent reads, edits, and navigates files, the tree and viewer update instantly.
+That's it. A Ghostty window opens with your file tree on the left and a code viewer on the right. Start using your AI agent in any terminal — the viewer reacts to every file operation.
 
-## What You Get
+## What You See
 
-- **Live file tracking** — every Read, Edit, Write, Glob, and Grep updates the tree and viewer
-- **Line highlighting** — the viewer jumps to the exact line being worked on, with multi-line block highlights for edits
-- **Project scoping** — only reacts to files in the current project (use `--global` to track everything)
-- **Markdown preview** — toggle between raw code (bat) and rendered markdown (glow)
-- **Collapsible tree** — hide the sidebar when you need more space
-- **Optional agent pane** — add an embedded terminal for any agent (claude, aider, etc)
-- **Resize-aware** — viewer re-renders automatically when you resize panes
-- **Zero overhead when idle** — hooks exit immediately if no session is running
+- **File tree** (left) — powered by [broot](https://dystroy.org/broot/). Highlights the active file as your agent navigates the codebase.
+- **Code viewer** (center) — powered by [bat](https://github.com/sharkdp/bat). Shows the file being read or edited, with syntax highlighting and line-level focus. Supports rendered markdown via [glow](https://github.com/charmbracelet/glow).
+- **Agent pane** (optional, right) — an embedded terminal running your agent. Toggle it on with `idealyze toggle agent` or launch with `idealyze --with-agent`.
+
+## What It Tracks
+
+Every time your agent uses a file tool (Read, Edit, Write, Grep, Glob), Idealize reacts:
+
+| Agent action | What Idealize does |
+|---|---|
+| Read a file | Viewer shows the file, scrolls to the read offset |
+| Edit a file | Viewer highlights the edited line(s) with a colored block |
+| Write a file | Viewer shows the new file from the top |
+| Grep/Glob | File tree navigates to the searched directory |
+
+All of this is scoped to your current project by default — activity from other terminals working on other projects is ignored.
 
 ## Commands
 
@@ -45,100 +55,120 @@ This opens a 2-pane Ghostty window: broot file tree on the left and a code viewe
 | `idealyze` | Launch IDE layout (tree + viewer) |
 | `idealyze --with-agent` | Launch with agent pane (default: claude) |
 | `idealyze --with-agent CMD` | Launch with custom agent command |
-| `idealyze --global` | Track files outside the project too |
+| `idealyze --global` | Track files from all projects, not just current |
 | `idealyze toggle tree` | Show or hide the file tree sidebar |
 | `idealyze toggle agent` | Add or remove the agent pane |
-| `idealyze toggle render` | Switch viewer between raw and rendered mode |
-| `idealyze doctor` | Diagnose dependencies and check for updates |
-| `idealyze update` | Update to latest version from install channel |
-| `idealyze stop` | Close the session and Ghostty window |
-| `idealyze uninstall` | Remove Idealize, its hooks, and all files |
-
-## Environment
-
-| Variable | Description |
-|---|---|
-| `IDEALYZE_DEBUG=1` | Enable verbose logging to `~/.idealyze/debug.log` |
-| `IDEALYZE_AGENT_CMD=<cmd>` | Override agent command (default: claude) |
+| `idealyze toggle render` | Switch viewer between raw (bat) and rendered (glow) |
+| `idealyze doctor` | Check dependencies, hooks, config, and updates |
+| `idealyze update` | Update to latest version |
+| `idealyze stop` | Close the Idealize window and clean up |
+| `idealyze uninstall` | Remove Idealize completely (hooks, config, files) |
 
 ## Configuration
 
-Idealize uses a JSON config file with 3-level resolution: project > user > built-in defaults.
+Idealize reads config from JSON files with 3-level priority:
 
-- **Project**: `.idealyze/config.json` in your project directory
-- **User**: `~/.idealyze/config.json`
+1. **Project** `.idealyze/config.json` — overrides for this project only
+2. **User** `~/.idealyze/config.json` — your personal defaults
+3. **Built-in** `lib/config-defaults.json` — shipped defaults
 
-Only specify the keys you want to override. Example `~/.idealyze/config.json`:
+Only specify keys you want to change. Example `~/.idealyze/config.json`:
 
 ```json
 {
-  "provider": "claude-code",
-  "agent_cmd": "claude",
-  "scope": "project",
+  "agent_cmd": "aider",
   "viewer": {
-    "mode": "raw",
-    "highlight_color": "40;40;160"
+    "highlight_color": "80;0;80"
   },
   "layout": {
-    "tree_shrink_2pane": 30,
-    "resize_step": 10
+    "tree_shrink_2pane": 20
   }
 }
 ```
 
-See `lib/config-defaults.json` for all available keys.
+All available keys are in [`lib/config-defaults.json`](lib/config-defaults.json).
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `IDEALYZE_DEBUG=1` | Enable detailed logging to `~/.idealyze/debug.log` |
+| `IDEALYZE_AGENT_CMD=<cmd>` | Override agent command for this session |
+
+## Troubleshooting
+
+Run `idealyze doctor` — it checks everything and offers to fix what it can.
+
+For deeper issues, enable debug mode:
+
+```bash
+IDEALYZE_DEBUG=1 idealyze
+```
+
+Then reproduce the problem and share `~/.idealyze/debug.log`.
 
 ## How It Works
 
 Idealize is event-driven. No background daemons besides a lightweight viewer loop.
 
 1. `idealyze` creates a Ghostty window with panes via AppleScript
-2. A viewer loop watches for render commands in the viewer pane
+2. A viewer loop runs in the viewer pane, watching for render commands
 3. When your agent uses a file tool, the `PostToolUse` hook fires
-4. The hook updates broot via socket IPC and writes a render command to `~/.idealyze/viewer-cmd`
-5. The viewer loop picks up the command and re-renders bat/glow, including on terminal resize
+4. The hook writes a render command to `~/.idealyze/viewer-cmd` and updates broot via socket
+5. The viewer loop picks it up and re-renders, including on terminal resize (SIGWINCH)
 
-Currently ships with hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). PRs welcome for other agents.
+The hook system is provider-based. Currently ships with a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) provider. Adding support for other agents means creating a new file in `lib/providers/` — see [Design](docs/design.md) for the interface.
 
 ## Requirements
 
-- macOS (uses AppleScript)
-- [Ghostty](https://ghostty.org) 1.3+
-- [broot](https://dystroy.org/broot/)
-- [bat](https://github.com/sharkdp/bat)
-- [jq](https://jqlang.github.io/jq/)
-- [glow](https://github.com/charmbracelet/glow) (optional, for rendered markdown preview)
+| Dependency | Required | Install |
+|---|---|---|
+| macOS | Yes | Uses AppleScript for Ghostty control |
+| [Ghostty](https://ghostty.org) 1.3+ | Yes | Download from ghostty.org |
+| [broot](https://dystroy.org/broot/) | Yes | `brew install broot` |
+| [bat](https://github.com/sharkdp/bat) | Yes | `brew install bat` |
+| [jq](https://jqlang.github.io/jq/) | Yes | `brew install jq` |
+| [glow](https://github.com/charmbracelet/glow) | No | `brew install glow` (for rendered markdown) |
 
-All dependencies except Ghostty can be installed automatically by the installer or `idealyze doctor`.
+The installer and `idealyze doctor` can install all brew dependencies automatically.
 
-## Install Channels
+## Install Options
 
-The default install pulls from the `latest` tag (stable):
-
+**Stable (recommended):**
 ```bash
 bash <(curl -fsSL https://idealize.diananerd.com/install.sh)
 ```
 
-To try pre-release features:
-
+**Beta (pre-release features):**
 ```bash
 bash <(curl -fsSL https://idealize.diananerd.com/install.sh?channel=beta) --beta
+```
+
+**Non-interactive (CI/scripting):**
+```bash
+bash <(curl -fsSL https://idealize.diananerd.com/install.sh) --auto
+```
+
+**Project-local install:**
+```bash
+bash <(curl -fsSL https://idealize.diananerd.com/install.sh) --project
 ```
 
 ## Contributing
 
 Idealize is maintained by [@diananerd](https://github.com/diananerd). Contributions welcome:
 
-1. Fork the repo and create a feature branch
+1. Fork the repo and create a feature branch from `dev`
 2. Make your changes and test with `idealyze doctor`
 3. Open a PR against `main` — describe what and why
 
-Please keep PRs focused (one feature or fix per PR). For larger changes, open an issue first to discuss the approach.
+Keep PRs focused (one feature or fix per PR). For larger changes, open an issue first to discuss the approach.
 
 ## Documentation
 
-- [Design](docs/design.md) — architecture, pane layout, and IPC model
+- [Design](docs/design.md) — architecture, IPC model, provider interface
 - [Releasing](docs/releasing.md) — release channels, tagging, and workflow
+- [CLAUDE.md](CLAUDE.md) — development guide for AI agents working on this codebase
 
 ## License
 
