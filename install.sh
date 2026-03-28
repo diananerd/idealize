@@ -318,7 +318,7 @@ source "${INSTALL_DIR}/lib/providers/claude-code.sh"
 
 if provider_is_installed; then
     ok "$(provider_name) detected"
-    if ask_yn "Set up $(provider_name) integration? (enables live file tracking)" "y"; then
+    if ask_yn "Set up $(provider_name) hooks? (required for file tracking)" "y"; then
         HOOK_CMD="bash ${INSTALL_DIR}/lib/hooks.sh"
         if [[ "$INSTALL_MODE" == "project" && -d ".claude" ]]; then
             hook_mode="project"
