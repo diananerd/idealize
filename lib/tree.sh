@@ -5,7 +5,11 @@
 
 set -euo pipefail
 
-SOCKET_NAME="idealyze"
+LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${LIB_DIR}/config.sh"
+config_load
+
+SOCKET_NAME=$(cfg "broot_socket" "idealyze")
 ACTION="${1:-}"
 TARGET="${2:-}"
 DEBUG_LOG="${HOME}/.idealyze/debug.log"
