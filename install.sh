@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Idealize installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh | bash
+# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh)
 #
 # Flags:
 #   --user      Install for current user (default)
@@ -10,10 +10,6 @@
 # Interactive installer with dependency management, colored output, and smart defaults.
 
 set -euo pipefail
-
-# Wrap in main() so bash reads the entire script before executing.
-# This prevents curl|bash from having stdin consumed by subprocesses.
-main() {
 
 REPO="diananerd/idealize"
 BASE_URL="https://raw.githubusercontent.com/${REPO}/main"
@@ -351,6 +347,3 @@ fi
 echo -e "  ${DIM}Uninstall: idealyze uninstall${RESET}"
 echo ""
 
-} # end main
-
-main "$@"

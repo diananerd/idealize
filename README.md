@@ -14,7 +14,7 @@ Watch Claude Code work in real time — file tree and code viewer side by side i
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh)
 ```
 
 The installer downloads Idealize to `~/.local/bin/`, configures a `PostToolUse` hook in `~/.claude/settings.json`, and checks your dependencies.
