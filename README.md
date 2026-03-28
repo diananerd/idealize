@@ -73,6 +73,30 @@ Idealize is event-driven. No background daemons besides a lightweight viewer loo
 - [jq](https://jqlang.github.io/jq/)
 - [glow](https://github.com/charmbracelet/glow) (optional, for markdown preview)
 
+## Install channels
+
+The default install always pulls from the `latest` tag (stable):
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/latest/install.sh)
+```
+
+To try pre-release features:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/beta/install.sh) --beta
+```
+
+## Contributing
+
+Idealize is maintained by [@diananerd](https://github.com/diananerd). Contributions welcome:
+
+1. Fork the repo and create a feature branch
+2. Make your changes and test with `idealyze doctor`
+3. Open a PR against `main` — describe what and why
+
+Please keep PRs focused (one feature or fix per PR). For larger changes, open an issue first to discuss the approach.
+
 ## Documentation
 
 - [Design](docs/design.md) — architecture, pane layout, and IPC model

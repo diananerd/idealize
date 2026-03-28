@@ -6,13 +6,19 @@
 #   --user      Install for current user (default)
 #   --project   Install into current directory
 #   --auto      Non-interactive mode — installs everything including optionals
+#   --beta      Install from beta channel instead of stable
 #
 # Interactive installer with dependency management, colored output, and smart defaults.
 
 set -euo pipefail
 
 REPO="diananerd/idealize"
-BASE_URL="https://raw.githubusercontent.com/${REPO}/main"
+
+# Release channel: --beta downloads from beta tag, default is latest (stable)
+CHANNEL="latest"
+for arg in "$@"; do [[ "$arg" == "--beta" ]] && CHANNEL="beta"; done
+
+BASE_URL="https://raw.githubusercontent.com/${REPO}/${CHANNEL}"
 
 # Non-interactive mode: --auto installs everything without prompts
 AUTO=false
