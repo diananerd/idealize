@@ -4,6 +4,13 @@
 
 set -uo pipefail
 
+LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${LIB_DIR}/config.sh"
+config_load
+
+POLL_INTERVAL=$(cfg "viewer.poll_interval" "0.3")
+STABILIZE_RETRIES=$(cfg "layout.dimension_stabilize_retries" "10")
+
 IDEALYZE_DIR="${HOME}/.idealyze"
 CMD_FILE="${IDEALYZE_DIR}/viewer-cmd"
 DEBUG_LOG="${IDEALYZE_DIR}/debug.log"
@@ -46,11 +53,11 @@ initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f -iname 'readme*' 2>/dev/n
 if [[ -n "$initial_file" ]]; then
     # Wait for pane dimensions to stabilize (layout applescript is resizing)
     prev_cols=0
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
+    for _ in $(seq 1 "$STABILIZE_RETRIES"); do
         cur_cols=$(tput cols 2>/dev/null || echo 0)
         [[ "$cur_cols" == "$prev_cols" && "$cur_cols" -gt 0 ]] && break
         prev_cols="$cur_cols"
-        sleep 0.3
+        sleep "$POLL_INTERVAL"
     done
     CURRENT_CMD="clear && bat --paging=never --wrap=auto --style=numbers,header,grid --color=always '${initial_file//\'/\'\\\'\'}'"
     render
@@ -72,5 +79,5 @@ while true; do
             fi
         fi
     fi
-    sleep 0.3
+    sleep "$POLL_INTERVAL"
 done
