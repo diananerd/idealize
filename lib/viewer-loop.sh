@@ -41,7 +41,9 @@ PROJECT_DIR="${1:-.}"
 initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f -iname 'readme*' | head -1)
 [[ -z "$initial_file" ]] && initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f ! -name '.*' | sort | head -1)
 if [[ -n "$initial_file" ]]; then
-    CURRENT_CMD="clear && BAT_HIGHLIGHT_COLOR='#3a3a6a' bat --paging=never --style=numbers,header,grid --color=always \"${initial_file}\""
+    # Delay to let layout finish resizing panes
+    sleep 1
+    CURRENT_CMD="clear && bat --paging=never --wrap=auto --terminal-width=\$(tput cols) --style=numbers,header,grid --color=always --line-range 1:\$(tput lines) \"${initial_file}\""
     render
 else
     echo "idealize: no files found in project root"

@@ -64,6 +64,7 @@ fi
 
 # Extract file path based on tool type
 FILE_PATH=""
+LINE_END=""
 LINE_NUMBER=""
 
 case "$TOOL_NAME" in
@@ -85,14 +86,20 @@ case "$TOOL_NAME" in
         ;;
     Edit)
         FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
-        # Find line of new_string in the file (old_string no longer exists post-edit)
+        # Find line range of new_string in the file
         NEW_STRING=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.new_string // empty')
         if [[ -n "$NEW_STRING" && -n "$FILE_PATH" && -f "$FILE_PATH" ]]; then
             FIRST_LINE=$(printf '%s' "$NEW_STRING" | head -1)
             LINE_NUMBER=$(grep -nF -- "$FIRST_LINE" "$FILE_PATH" 2>/dev/null | head -1 | cut -d: -f1 || true)
+            # Count lines in new_string for multi-line highlight
+            local new_line_count
+            new_line_count=$(printf '%s' "$NEW_STRING" | wc -l | tr -d ' ')
+            if [[ -n "$LINE_NUMBER" && "$new_line_count" -gt 1 ]]; then
+                LINE_END=$(( LINE_NUMBER + new_line_count ))
+            fi
         fi
         LINE_NUMBER="${LINE_NUMBER:-1}"
-        debug "Edit: file=$FILE_PATH line=$LINE_NUMBER"
+        debug "Edit: file=$FILE_PATH line=$LINE_NUMBER end=${LINE_END:-}"
         ;;
     Write)
         FILE_PATH=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
@@ -141,7 +148,7 @@ fi
 "$LIB_DIR/tree.sh" select "$FILE_PATH" &
 
 # Build viewer command
-VIEWER_CMD=$("$LIB_DIR/viewer.sh" "$FILE_PATH" "$LINE_NUMBER" "$VIEWER_MODE")
+VIEWER_CMD=$("$LIB_DIR/viewer.sh" "$FILE_PATH" "$LINE_NUMBER" "$VIEWER_MODE" "${LINE_END:-}")
 debug "viewer_cmd: $VIEWER_CMD"
 
 if [[ -n "$VIEWER_CMD" ]]; then

@@ -8,6 +8,7 @@ set -euo pipefail
 FILE_PATH="${1:-}"
 LINE_NUMBER="${2:-}"
 VIEWER_MODE="${3:-bat}"
+LINE_END="${4:-}"
 DEBUG_LOG="${HOME}/.idealyze/debug.log"
 
 debug() {
@@ -40,15 +41,23 @@ fi
 # Validate LINE_NUMBER is numeric to prevent injection in arithmetic
 [[ "$LINE_NUMBER" =~ ^[0-9]+$ ]] || LINE_NUMBER=""
 
-BAT="bat --paging=never --style=numbers,header,grid --color=always"
+BAT="bat --paging=never --wrap=auto --terminal-width=\$(tput cols) --style=numbers,header,grid --color=always"
 
 # Boost bat's highlight color from dim gray (51,51,51) to vivid blue (40,40,160)
 # Must replace both "48;2;51;51;51;" (bg+fg combined) and "48;2;51;51;51m" (bg only)
 BOOST="sed $'s/48;2;51;51;51/48;2;40;40;160/g'"
 
+# Build highlight range (single line or multi-line block)
+[[ "$LINE_END" =~ ^[0-9]+$ ]] || LINE_END=""
+if [[ -n "$LINE_END" && "$LINE_END" -gt "${LINE_NUMBER:-0}" ]]; then
+    HIGHLIGHT="${LINE_NUMBER}:${LINE_END}"
+else
+    HIGHLIGHT="${LINE_NUMBER}"
+fi
+
 if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
     # Terminal-height window centered on the target line
-    CMD="clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${LINE_NUMBER} --line-range \${S}:\${E} \"${FILE_PATH}\" | ${BOOST}"
+    CMD="clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${HIGHLIGHT} --line-range \${S}:\${E} \"${FILE_PATH}\" | ${BOOST}"
 else
     # No specific line — show from top, capped to terminal height
     CMD="clear && ${BAT} --line-range 1:\$(tput lines) \"${FILE_PATH}\""
