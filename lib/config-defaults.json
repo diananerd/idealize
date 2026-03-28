@@ -1,0 +1,25 @@
+{
+  "provider": "claude-code",
+  "agent_cmd": "claude",
+  "scope": "project",
+  "broot_socket": "idealyze",
+  "viewer": {
+    "mode": "raw",
+    "poll_interval": 0.3,
+    "highlight_color": "40;40;160",
+    "highlight_color_source": "51;51;51",
+    "bat_style": "numbers,header,grid"
+  },
+  "layout": {
+    "tree_shrink_2pane": 30,
+    "tree_shrink_3pane": 13,
+    "tree_shrink_restore": 30,
+    "resize_step": 10,
+    "resize_settle_delay": 0.5,
+    "dimension_stabilize_retries": 10
+  },
+  "updates": {
+    "check_timeout": 3,
+    "channel": "latest"
+  }
+}
