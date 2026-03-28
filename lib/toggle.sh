@@ -74,9 +74,9 @@ case "$ACTION" in
         fi
         ;;
 
-    preview)
-        read -r CURRENT_MODE VIEWER_ID < <(jq -r '[.viewer_mode, (.panes.viewer // "" | tostring)] | @tsv' "$SESSION_FILE")
-        # Read current file/line from the IPC file (hooks.sh writes here, not session.json)
+    render)
+        CURRENT_MODE=$(jq -r '.viewer_mode' "$SESSION_FILE")
+        VIEWER_ID=$(jq -r '.panes.viewer // ""' "$SESSION_FILE")
         CURRENT_FILE=""
         CURRENT_LINE="1"
         if [[ -f "${IDEALYZE_DIR}/current-file" ]]; then
@@ -86,27 +86,25 @@ case "$ACTION" in
         fi
         debug "mode=$CURRENT_MODE file=$CURRENT_FILE line=$CURRENT_LINE viewer_id=$VIEWER_ID"
 
-        # Validate VIEWER_ID
         [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
 
-        if [[ "$CURRENT_MODE" == "bat" ]]; then
-            if ! command -v glow &>/dev/null; then
-                echo "idealize: glow not installed — preview mode requires glow" >&2
-                echo "  install: brew install glow" >&2
+        if [[ "$CURRENT_MODE" == "raw" ]]; then
+            # Switch to rendered mode
+            if command -v glow &>/dev/null; then
+                NEW_MODE="glow"
+            else
+                echo "idealize: glow not installed — rendered mode disabled" >&2
+                echo "  install with: brew install glow" >&2
                 exit 1
             fi
-            NEW_MODE="glow"
         else
-            NEW_MODE="bat"
+            # Switch to raw mode
+            NEW_MODE="raw"
         fi
 
-        if ! jq --arg m "$NEW_MODE" '.viewer_mode = $m' "$SESSION_FILE" > "${SESSION_FILE}.tmp"; then
-            echo "idealize: failed to update viewer mode in session" >&2
-            exit 1
-        fi
-        mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+        jq --arg m "$NEW_MODE" '.viewer_mode = $m' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
 
-        # Re-render current file with new mode via viewer-cmd (consistent with hooks path)
+        # Re-render current file with new mode via viewer-cmd
         if [[ -n "$CURRENT_FILE" && -f "$CURRENT_FILE" ]]; then
             VIEWER_CMD=$("$LIB_DIR/viewer.sh" "$CURRENT_FILE" "$CURRENT_LINE" "$NEW_MODE")
             debug "viewer_cmd=$VIEWER_CMD"
@@ -116,7 +114,11 @@ case "$ACTION" in
             fi
         fi
 
-        echo "idealize: viewer mode → ${NEW_MODE}"
+        if [[ "$NEW_MODE" == "glow" ]]; then
+            echo "idealize: viewer → rendered"
+        else
+            echo "idealize: viewer → raw"
+        fi
         debug "switched to $NEW_MODE"
         ;;
 
@@ -161,7 +163,7 @@ case "$ACTION" in
         ;;
 
     *)
-        echo "Usage: idealyze toggle tree|agent|preview" >&2
+        echo "Usage: idealyze toggle tree|agent|render" >&2
         exit 1
         ;;
 esac

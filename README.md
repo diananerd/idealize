@@ -47,7 +47,7 @@ This opens a 2-pane Ghostty window: broot file tree on the left and a code viewe
 | `idealyze --global` | Track files outside the project too |
 | `idealyze toggle tree` | Collapse or restore the file tree sidebar |
 | `idealyze toggle claude` | Add or remove the Claude pane |
-| `idealyze toggle preview` | Switch the viewer between bat and glow |
+| `idealyze toggle render` | Switch viewer between raw and rendered mode |
 | `idealyze stop` | Close the session and Ghostty window |
 | `idealyze uninstall` | Remove Idealize, its hooks, and all files |
 

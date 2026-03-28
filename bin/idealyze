@@ -41,7 +41,8 @@ Usage:
     idealyze --global              Capture events from all projects
     idealyze toggle tree           Collapse/restore file tree sidebar
     idealyze toggle agent          Add/remove the agent pane
-    idealyze toggle preview        Switch between bat and glow viewer
+    idealyze toggle render         Switch between raw and rendered viewer
+    idealyze doctor                Diagnose and fix dependencies
     idealyze stop                  Close session and Ghostty window
     idealyze uninstall             Remove idealyze completely
     idealyze --version             Show version
@@ -65,17 +66,152 @@ check_deps() {
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo "idealize: missing dependencies: ${missing[*]}" >&2
+        echo "  run 'idealyze doctor' to diagnose and fix" >&2
         exit 1
     fi
 
     if [[ ! -d "/Applications/Ghostty.app" ]]; then
         echo "idealize: Ghostty.app not found in /Applications" >&2
+        echo "  run 'idealyze doctor' to diagnose and fix" >&2
         exit 1
     fi
 
     if ! command -v glow &>/dev/null; then
-        echo "idealize: glow not found (optional — preview mode will use bat)" >&2
+        echo "idealize: glow not found (optional — run 'idealyze doctor' to install)" >&2
     fi
+}
+
+doctor() {
+    # Colors
+    local B='\033[1m' D='\033[2m' G='\033[32m' Y='\033[33m' R='\033[31m' C='\033[36m' BL='\033[34m' N='\033[0m'
+    [[ ! -t 1 ]] && B='' D='' G='' Y='' R='' C='' BL='' N=''
+
+    local ok="${G}ok${N}" bad="${R}!!${N}" opt="${D}--${N}"
+    local has_brew=false all_ok=true
+    command -v brew &>/dev/null && has_brew=true
+
+    echo -e "\n${B}${BL}idealize doctor${N}\n"
+
+    # --- System ---
+    echo -e "${B}System${N}"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        echo -e "  ${ok}  macOS $(sw_vers -productVersion 2>/dev/null || echo '')"
+    else
+        echo -e "  ${bad}  not macOS — idealize requires macOS"
+        all_ok=false
+    fi
+
+    if [[ -d "/Applications/Ghostty.app" ]]; then
+        echo -e "  ${ok}  Ghostty"
+    else
+        echo -e "  ${bad}  Ghostty ${D}— download from https://ghostty.org${N}"
+        all_ok=false
+    fi
+
+    # --- Required deps ---
+    echo -e "\n${B}Required${N}"
+    local missing_req=()
+    for dep in jq broot bat; do
+        if command -v "$dep" &>/dev/null; then
+            local ver
+            ver=$("$dep" --version 2>/dev/null | head -1 || echo "installed")
+            echo -e "  ${ok}  ${dep} ${D}${ver}${N}"
+        else
+            echo -e "  ${bad}  ${dep}"
+            missing_req+=("$dep")
+            all_ok=false
+        fi
+    done
+
+    # --- Optional deps ---
+    echo -e "\n${B}Optional${N}"
+    local missing_opt=()
+    for dep in glow; do
+        if command -v "$dep" &>/dev/null; then
+            local ver
+            ver=$("$dep" --version 2>/dev/null | head -1 || echo "installed")
+            echo -e "  ${ok}  ${dep} ${D}${ver}${N}"
+        else
+            echo -e "  ${opt}  ${dep} ${D}(enables rendered markdown preview)${N}"
+            missing_opt+=("$dep")
+        fi
+    done
+
+    # --- Hooks ---
+    echo -e "\n${B}Hooks${N}"
+    local claude_settings="${HOME}/.claude/settings.json"
+    if [[ -f "$claude_settings" ]]; then
+        if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command | test("hooks\\.sh"))' "$claude_settings" &>/dev/null; then
+            echo -e "  ${ok}  Claude Code PostToolUse hook configured"
+        else
+            echo -e "  ${bad}  Claude Code hook not found in settings.json"
+            all_ok=false
+        fi
+    else
+        echo -e "  ${bad}  ${claude_settings} not found"
+        all_ok=false
+    fi
+
+    # --- Install ---
+    echo -e "\n${B}Install${N}"
+    if [[ -d "$IDEALYZE_HOME" ]]; then
+        if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
+            local mode
+            mode=$(grep '^mode=' "${IDEALYZE_HOME}/.install-meta" | cut -d= -f2)
+            echo -e "  ${ok}  installed (${mode} mode)"
+        else
+            echo -e "  ${ok}  installed ${D}(no metadata)${N}"
+        fi
+    else
+        echo -e "  ${bad}  not installed"
+        all_ok=false
+    fi
+
+    # --- Autofix ---
+    if [[ ${#missing_req[@]} -gt 0 && "$has_brew" == true ]]; then
+        echo ""
+        echo -en "  ${C}?${N} Install missing required deps via brew? (${missing_req[*]}) ${D}[Y/n]${N} "
+        local reply
+        read -r reply </dev/tty 2>/dev/null || reply=""
+        reply="${reply:-y}"
+        if [[ "$reply" =~ ^[Yy] ]]; then
+            for dep in "${missing_req[@]}"; do
+                echo -e "  ${C}>${N} installing ${B}${dep}${N}..."
+                if brew install "$dep" 2>/dev/null; then
+                    echo -e "  ${ok}  ${dep} installed"
+                else
+                    echo -e "  ${bad}  failed to install ${dep}"
+                fi
+            done
+        fi
+    fi
+
+    if [[ ${#missing_opt[@]} -gt 0 && "$has_brew" == true ]]; then
+        echo ""
+        echo -en "  ${C}?${N} Install optional deps? (${missing_opt[*]}) ${D}[y/N]${N} "
+        local reply
+        read -r reply </dev/tty 2>/dev/null || reply=""
+        reply="${reply:-n}"
+        if [[ "$reply" =~ ^[Yy] ]]; then
+            for dep in "${missing_opt[@]}"; do
+                echo -e "  ${C}>${N} installing ${B}${dep}${N}..."
+                if brew install "$dep" 2>/dev/null; then
+                    echo -e "  ${ok}  ${dep} installed"
+                else
+                    echo -e "  ${bad}  failed to install ${dep}"
+                fi
+            done
+        fi
+    fi
+
+    # --- Summary ---
+    echo ""
+    if [[ "$all_ok" == true ]]; then
+        echo -e "  ${G}${B}All good!${N}"
+    else
+        echo -e "  ${Y}Some issues found — fix them and run 'idealyze doctor' again${N}"
+    fi
+    echo ""
 }
 
 launch() {
@@ -150,7 +286,7 @@ launch() {
         --arg aid "$agent_id" \
         '{
             version: $ver, pid: $pid, project_dir: $pd, scope: $scope,
-            agent_cmd: $acmd, broot_socket: "idealyze", viewer_mode: "bat",
+            agent_cmd: $acmd, broot_socket: "idealyze", viewer_mode: "raw",
             tree_visible: true, current_file: null, current_line: 1,
             panes: { window: $wid, tree: $tid, viewer: $vid, agent: $aid }
         }' > "$SESSION_FILE"
@@ -257,6 +393,9 @@ case "${1:-}" in
     toggle)
         shift
         exec "${LIB_DIR}/toggle.sh" "${1:-}"
+        ;;
+    doctor)
+        doctor
         ;;
     stop)
         stop_session

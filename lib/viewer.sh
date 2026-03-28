@@ -7,7 +7,7 @@ set -euo pipefail
 
 FILE_PATH="${1:-}"
 LINE_NUMBER="${2:-}"
-VIEWER_MODE="${3:-bat}"
+VIEWER_MODE="${3:-raw}"
 LINE_END="${4:-}"
 DEBUG_LOG="${HOME}/.idealyze/debug.log"
 

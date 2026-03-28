@@ -20,7 +20,7 @@ debug() {
 }
 
 # Read session state (single jq call)
-read -r VIEWER_MODE VIEWER_ID PROJECT_DIR SCOPE < <(jq -r '[.viewer_mode // "bat", (.panes.viewer // "" | tostring), .project_dir // "", .scope // "project"] | @tsv' "$SESSION_FILE")
+read -r VIEWER_MODE VIEWER_ID PROJECT_DIR SCOPE < <(jq -r '[.viewer_mode // "raw", (.panes.viewer // "" | tostring), .project_dir // "", .scope // "project"] | @tsv' "$SESSION_FILE")
 debug "session: viewer_mode=$VIEWER_MODE viewer_id=$VIEWER_ID project_dir=$PROJECT_DIR scope=$SCOPE"
 
 if [[ -z "$VIEWER_ID" ]]; then
