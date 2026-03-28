@@ -33,15 +33,25 @@ trap 'render' WINCH
 mkdir -p "$IDEALYZE_DIR"
 : > "$CMD_FILE"
 
-debug "viewer-loop started"
+# Store PID so toggles can send WINCH to force re-render
+echo $$ > "${IDEALYZE_DIR}/viewer-loop.pid"
+trap 'rm -f "${IDEALYZE_DIR}/viewer-loop.pid"; exit' EXIT INT TERM
+
+debug "viewer-loop started (pid=$$)"
 
 # Show initial file: prefer README, then first non-hidden file
 PROJECT_DIR="${1:-.}"
 initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f -iname 'readme*' 2>/dev/null | head -1)
 [[ -z "$initial_file" ]] && initial_file=$(find "$PROJECT_DIR" -maxdepth 1 -type f ! -name '.*' 2>/dev/null | sort | head -1)
 if [[ -n "$initial_file" ]]; then
-    # Delay to let layout finish resizing panes
-    sleep 1
+    # Wait for pane dimensions to stabilize (layout applescript is resizing)
+    prev_cols=0
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        cur_cols=$(tput cols 2>/dev/null || echo 0)
+        [[ "$cur_cols" == "$prev_cols" && "$cur_cols" -gt 0 ]] && break
+        prev_cols="$cur_cols"
+        sleep 0.3
+    done
     CURRENT_CMD="clear && bat --paging=never --wrap=auto --style=numbers,header,grid --color=always '${initial_file//\'/\'\\\'\'}'"
     render
 else

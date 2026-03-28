@@ -13,6 +13,19 @@ debug() {
     [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && echo "[toggl $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG" || true
 }
 
+# Send WINCH to viewer-loop to force re-render after pane size changes
+notify_viewer_resize() {
+    local pid_file="${IDEALYZE_DIR}/viewer-loop.pid"
+    if [[ -f "$pid_file" ]]; then
+        local vpid
+        vpid=$(cat "$pid_file" 2>/dev/null)
+        if [[ -n "$vpid" ]] && kill -0 "$vpid" 2>/dev/null; then
+            # Small delay for pane resize to settle, then signal
+            (sleep 0.5 && kill -WINCH "$vpid" 2>/dev/null) &
+        fi
+    fi
+}
+
 if [[ ! -f "$SESSION_FILE" ]]; then
     echo "idealize: no active session" >&2
     exit 1
@@ -43,6 +56,7 @@ case "$ACTION" in
             " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
             jq '.tree_visible = false | .panes.tree = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: tree hidden"
+            notify_viewer_resize
         else
             # Re-create tree pane by splitting left from viewer
             debug "re-creating tree pane"
@@ -71,6 +85,7 @@ case "$ACTION" in
             debug "new tree_id=$NEW_TREE_ID"
             jq --arg t "$NEW_TREE_ID" '.tree_visible = true | .panes.tree = $t' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: tree restored"
+            notify_viewer_resize
         fi
         ;;
 
@@ -148,6 +163,7 @@ case "$ACTION" in
             debug "new agent_id=$NEW_IDS"
             jq --arg a "$NEW_IDS" '.panes.agent = $a' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: agent pane added (${AGENT_CMD})"
+            notify_viewer_resize
         else
             debug "removing agent pane"
             [[ "$AGENT_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid agent id" >&2; exit 1; }
@@ -159,6 +175,7 @@ case "$ACTION" in
             " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
             jq '.panes.agent = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: agent pane removed"
+            notify_viewer_resize
         fi
         ;;
 
