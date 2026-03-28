@@ -71,7 +71,7 @@ if [[ -n "$initial_file" ]]; then
         sleep "$POLL_INTERVAL"
     done
     debug "initial render: cols=$(tput cols 2>/dev/null) lines=$(tput lines 2>/dev/null) file=$initial_file"
-    CURRENT_CMD="clear && bat --paging=never --wrap=auto --style=numbers,header,grid --color=always '${initial_file//\'/\'\\\'\'}'"
+    CURRENT_CMD="clear && bat --paging=never --wrap=auto --style=numbers,header,grid --color=always --line-range 1:\$(tput lines) '${initial_file//\'/\'\\\'\'}'"
     render
 else
     echo "idealize: no files found in project root"
