@@ -20,9 +20,18 @@ for arg in "$@"; do [[ "$arg" == "--beta" ]] && CHANNEL="beta"; done
 
 BASE_URL="https://raw.githubusercontent.com/${REPO}/${CHANNEL}"
 
-# Non-interactive mode: --auto installs everything without prompts
+# Parse flags from all args
 AUTO=false
-for arg in "$@"; do [[ "$arg" == "--auto" ]] && AUTO=true; done
+ARG_PROJECT=false
+ARG_USER=false
+for arg in "$@"; do
+    case "$arg" in
+        --auto) AUTO=true ;;
+        --project) ARG_PROJECT=true ;;
+        --user) ARG_USER=true ;;
+        --beta) ;; # handled by CHANNEL
+    esac
+done
 
 # --- Colors ---
 
@@ -93,9 +102,9 @@ command -v jq &>/dev/null || fail "jq is required (brew install jq)"
 
 header "Install location"
 
-if [[ "${1:-}" == "--project" ]]; then
+if [[ "$ARG_PROJECT" == true ]]; then
     INSTALL_MODE="project"
-elif [[ "${1:-}" == "--user" ]] || [[ "$AUTO" == true ]]; then
+elif [[ "$ARG_USER" == true ]] || [[ "$AUTO" == true ]]; then
     INSTALL_MODE="user"
 else
     echo ""
@@ -390,10 +399,19 @@ echo ""
 echo -e "${GREEN}${BOLD}  Done!${RESET}"
 echo ""
 if [[ "$INSTALL_MODE" == "project" ]]; then
-    echo -e "  Run ${BOLD}.idealyze/bin/idealyze${RESET} from this directory"
+    # Create a convenience wrapper in the project root
+    if [[ ! -f "./idealyze" ]]; then
+        cat > "./idealyze" <<'WRAPPER'
+#!/usr/bin/env bash
+exec "$(dirname "$0")/.idealyze/bin/idealyze" "$@"
+WRAPPER
+        chmod +x "./idealyze"
+    fi
+    echo -e "  Run ${BOLD}./idealyze${RESET} from this directory"
+    echo -e "  ${DIM}Uninstall: ./idealyze uninstall${RESET}"
 else
     echo -e "  Run ${BOLD}idealyze${RESET} in any project directory"
+    echo -e "  ${DIM}Uninstall: idealyze uninstall${RESET}"
 fi
-echo -e "  ${DIM}Uninstall: idealyze uninstall${RESET}"
 echo ""
 

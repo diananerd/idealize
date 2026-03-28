@@ -545,6 +545,15 @@ uninstall() {
         echo -e "  ${ok}  removed ${bin_dir}/idealyze"
     fi
 
+    # --- Remove project wrapper if present ---
+    if [[ "$install_mode" == "project" ]]; then
+        local wrapper="$(pwd)/idealyze"
+        if [[ -f "$wrapper" ]] && grep -q '.idealyze/bin/idealyze' "$wrapper" 2>/dev/null; then
+            rm -f "$wrapper"
+            echo -e "  ${ok}  removed ./idealyze wrapper"
+        fi
+    fi
+
     echo -e "\n  ${G}${B}Uninstalled${N} ${D}(${install_mode} mode)${N}\n"
 }
 
