@@ -35,8 +35,11 @@ usage() {
 idealyze — Terminal IDE for Claude Code
 
 Usage:
-    idealyze                  Launch IDE layout in current directory
+    idealyze                  Launch IDE layout (tree + viewer)
+    idealyze --with-claude    Launch with embedded Claude pane
+    idealyze --global         Capture events from all projects
     idealyze toggle tree      Collapse/restore file tree sidebar
+    idealyze toggle claude    Add/remove Claude pane
     idealyze toggle preview   Switch between bat and glow viewer
     idealyze stop             Close session
     idealyze uninstall        Remove idealyze completely
@@ -116,10 +119,9 @@ launch() {
     # Run AppleScript layout — returns JSON with terminal IDs
     local pane_json
     debug "running layout.applescript..."
-    pane_json=$(osascript "${LIB_DIR}/layout.applescript" \
-        "$project_dir" \
-        "$LIB_DIR" \
-        "${CONFIG_DIR}/broot-sidebar.toml") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
+    local layout_args=("$project_dir" "$LIB_DIR" "${CONFIG_DIR}/broot-sidebar.toml")
+    [[ "${IDEALYZE_WITH_CLAUDE:-}" != "1" ]] && layout_args+=("no-claude")
+    pane_json=$(osascript "${LIB_DIR}/layout.applescript" "${layout_args[@]}") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
     debug "pane_json: $pane_json"
 
     # Build session.json
@@ -253,6 +255,9 @@ case "${1:-}" in
         ;;
     --global)
         IDEALYZE_SCOPE="global" launch
+        ;;
+    --with-claude)
+        IDEALYZE_WITH_CLAUDE="1" launch
         ;;
     "")
         launch

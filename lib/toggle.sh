@@ -120,8 +120,49 @@ case "$ACTION" in
         debug "switched to $NEW_MODE"
         ;;
 
+    claude)
+        CLAUDE_ID=$(jq -r '.panes.claude // "" | tostring' "$SESSION_FILE")
+        VIEWER_ID=$(jq -r '.panes.viewer // "" | tostring' "$SESSION_FILE")
+        debug "claude_id=$CLAUDE_ID viewer_id=$VIEWER_ID"
+
+        [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
+
+        if [[ -z "$CLAUDE_ID" ]]; then
+            # Add Claude pane: split right from viewer
+            debug "adding claude pane"
+            project_dir=$(jq -r '.project_dir' "$SESSION_FILE")
+            NEW_IDS=$(osascript -e "
+                tell application \"Ghostty\"
+                    set cfg to new surface configuration
+                    set initial working directory of cfg to \"${project_dir}\"
+                    set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
+                    set claudeTerm to split viewerTerm direction right with configuration cfg
+                    input text \"claude\n\" to claudeTerm
+                    return id of claudeTerm
+                end tell
+            " 2>"${IDEALYZE_DIR}/osascript-error.log") || {
+                echo "idealize: failed to add claude pane" >&2; exit 1
+            }
+            debug "new claude_id=$NEW_IDS"
+            jq --arg c "$NEW_IDS" '.panes.claude = $c' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            echo "idealize: claude pane added"
+        else
+            # Remove Claude pane: close it
+            debug "removing claude pane"
+            [[ "$CLAUDE_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid claude id" >&2; exit 1; }
+            osascript -e "
+                tell application \"Ghostty\"
+                    set claudeTerm to first terminal whose id is \"${CLAUDE_ID}\"
+                    perform action \"close_surface\" on claudeTerm
+                end tell
+            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
+            jq '.panes.claude = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            echo "idealize: claude pane removed"
+        fi
+        ;;
+
     *)
-        echo "Usage: idealyze toggle tree|preview" >&2
+        echo "Usage: idealyze toggle tree|claude|preview" >&2
         exit 1
         ;;
 esac
