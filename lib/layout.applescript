@@ -1,22 +1,14 @@
 -- lib/layout.applescript
--- Usage: osascript lib/layout.applescript <project_dir> <lib_dir> <broot_conf> [no-agent|agent_cmd]
--- Outputs: JSON with terminal IDs for session.json
---
--- Layout: tree | viewer [| agent]
--- Strategy: split left from initial pane, then resize tree.
+-- Usage: osascript layout.applescript <project_dir> <lib_dir> <broot_conf> <agent_cmd> <shrink_count> <resize_step> <broot_socket>
 
 on run argv
     set projectDir to item 1 of argv
     set libDir to item 2 of argv
     set brootConf to item 3 of argv
-    set agentCmd to ""
-    if (count of argv) > 3 then
-        if item 4 of argv is "no-agent" then
-            set agentCmd to ""
-        else
-            set agentCmd to item 4 of argv
-        end if
-    end if
+    set agentCmd to item 4 of argv
+    set shrinkCount to (item 5 of argv) as integer
+    set resizeStep to (item 6 of argv) as integer
+    set brootSocket to item 7 of argv
 
     tell application "Ghostty"
         activate
@@ -24,7 +16,7 @@ on run argv
         set cfg to new surface configuration
         set initial working directory of cfg to projectDir
 
-        if agentCmd is not "" then
+        if agentCmd is not "no-agent" then
             -- 3-pane: tree | viewer | agent
             set win to new window with configuration cfg
             set agentTerminal to terminal 1 of selected tab of win
@@ -34,8 +26,8 @@ on run argv
 
             perform action "equalize_splits" on treeTerminal
 
-            repeat 13 times
-                perform action "resize_split:left,10" on treeTerminal
+            repeat shrinkCount times
+                perform action ("resize_split:left," & resizeStep) on treeTerminal
             end repeat
 
             set treeId to id of treeTerminal
@@ -43,7 +35,7 @@ on run argv
             set agentId to id of agentTerminal
             set winId to id of win
 
-            input text "broot --conf " & brootConf & " --listen idealyze " & projectDir & "\n" to treeTerminal
+            input text "broot --conf " & brootConf & " --listen " & brootSocket & " " & projectDir & "\n" to treeTerminal
             input text libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
             input text agentCmd & "\n" to agentTerminal
 
@@ -55,15 +47,15 @@ on run argv
 
             set treeTerminal to split viewerTerminal direction left with configuration cfg
 
-            repeat 30 times
-                perform action "resize_split:left,10" on treeTerminal
+            repeat shrinkCount times
+                perform action ("resize_split:left," & resizeStep) on treeTerminal
             end repeat
 
             set treeId to id of treeTerminal
             set viewerId to id of viewerTerminal
             set winId to id of win
 
-            input text "broot --conf " & brootConf & " --listen idealyze " & projectDir & "\n" to treeTerminal
+            input text "broot --conf " & brootConf & " --listen " & brootSocket & " " & projectDir & "\n" to treeTerminal
             input text libDir & "/viewer-loop.sh " & projectDir & "\n" to viewerTerminal
 
             return "{\"window_id\":\"" & (winId as text) & "\",\"tree_id\":\"" & (treeId as text) & "\",\"viewer_id\":\"" & (viewerId as text) & "\",\"agent_id\":\"\"}"

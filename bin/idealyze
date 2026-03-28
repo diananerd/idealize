@@ -30,6 +30,10 @@ else
     CONFIG_DIR="${SCRIPT_DIR}/../config"
 fi
 
+# Load configuration
+source "${LIB_DIR}/config.sh"
+config_load
+
 usage() {
     cat <<'EOF'
 idealyze — Terminal IDE companion for AI coding agents
@@ -321,20 +325,25 @@ launch() {
     [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && : > "$DEBUG_LOG"
     debug "=== new session $(date) ==="
 
-    # Resolve agent command
-    local agent_cmd="${IDEALYZE_AGENT_CMD:-claude}"
-    local with_agent="${IDEALYZE_WITH_AGENT:-}"
+    # Resolve agent command and config values
+    local agent_cmd broot_socket shrink step
+    agent_cmd="${IDEALYZE_AGENT_CMD:-$(cfg agent_cmd claude)}"
+    broot_socket=$(cfg "broot_socket" "idealyze")
+
+    if [[ -z "${IDEALYZE_WITH_AGENT:-}" ]]; then
+        shrink=$(cfg_int "layout.tree_shrink_2pane" "30")
+        agent_cmd="no-agent"
+    else
+        shrink=$(cfg_int "layout.tree_shrink_3pane" "13")
+    fi
+    step=$(cfg_int "layout.resize_step" "10")
 
     # Run AppleScript layout
     local pane_json
     debug "running layout.applescript..."
-    local layout_args=("$project_dir" "$LIB_DIR" "${CONFIG_DIR}/broot-sidebar.toml")
-    if [[ -z "$with_agent" ]]; then
-        layout_args+=("no-agent")
-    else
-        layout_args+=("$agent_cmd")
-    fi
-    pane_json=$(osascript "${LIB_DIR}/layout.applescript" "${layout_args[@]}") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
+    pane_json=$(osascript "${LIB_DIR}/layout.applescript" \
+        "$project_dir" "$LIB_DIR" "${CONFIG_DIR}/broot-sidebar.toml" \
+        "$agent_cmd" "$shrink" "$step" "$broot_socket") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
     debug "pane_json: $pane_json"
 
     # Build session.json
@@ -350,14 +359,15 @@ launch() {
         --argjson pid $$ \
         --arg pd "$project_dir" \
         --arg scope "${IDEALYZE_SCOPE:-project}" \
-        --arg acmd "$agent_cmd" \
+        --arg acmd "${agent_cmd}" \
+        --arg bsock "$broot_socket" \
         --arg wid "$window_id" \
         --arg tid "$tree_id" \
         --arg vid "$viewer_id" \
         --arg aid "$agent_id" \
         '{
             version: $ver, pid: $pid, project_dir: $pd, scope: $scope,
-            agent_cmd: $acmd, broot_socket: "idealyze", viewer_mode: "raw",
+            agent_cmd: $acmd, broot_socket: $bsock, viewer_mode: "raw",
             tree_visible: true, current_file: null, current_line: 1,
             panes: { window: $wid, tree: $tid, viewer: $vid, agent: $aid }
         }' > "$SESSION_FILE"
