@@ -323,6 +323,14 @@ launch() {
                 end tell
             " &>/dev/null; then
                 echo "idealize: cleaning up stale session..."
+                # Kill stale viewer-loop
+                local vpid_file="${IDEALYZE_HOME}/viewer-loop.pid"
+                if [[ -f "$vpid_file" ]]; then
+                    local stale_vpid
+                    stale_vpid=$(cat "$vpid_file" 2>/dev/null)
+                    [[ -n "$stale_vpid" ]] && kill "$stale_vpid" 2>/dev/null
+                    rm -f "$vpid_file"
+                fi
                 rm -f "$SESSION_FILE"
                 rm -f "/tmp/broot-server-$(cfg broot_socket idealyze).sock"
             else
@@ -415,6 +423,18 @@ stop_session() {
                 end try
             end tell
         " >/dev/null 2>/dev/null || true
+    fi
+
+    # Kill viewer-loop if still running
+    local vpid_file="${IDEALYZE_HOME}/viewer-loop.pid"
+    if [[ -f "$vpid_file" ]]; then
+        local vpid
+        vpid=$(cat "$vpid_file" 2>/dev/null)
+        if [[ -n "$vpid" ]] && kill -0 "$vpid" 2>/dev/null; then
+            kill "$vpid" 2>/dev/null
+            debug "killed viewer-loop pid=$vpid"
+        fi
+        rm -f "$vpid_file"
     fi
 
     rm -f "/tmp/broot-server-$(cfg broot_socket idealyze).sock"

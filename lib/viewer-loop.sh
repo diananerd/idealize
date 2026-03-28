@@ -42,8 +42,12 @@ on_winch() {
 # Re-render on terminal resize
 trap 'on_winch' WINCH
 
-# Cleanup on exit
-trap 'rm -f "${IDEALYZE_DIR}/viewer-loop.pid"; exit' EXIT INT TERM
+# Cleanup on exit — only remove PID file if it still belongs to us
+trap '
+    current_pid=$(cat "${IDEALYZE_DIR}/viewer-loop.pid" 2>/dev/null)
+    [[ "$current_pid" == "$$" ]] && rm -f "${IDEALYZE_DIR}/viewer-loop.pid"
+    exit
+' EXIT INT TERM
 
 # Initialize
 mkdir -p "$IDEALYZE_DIR"

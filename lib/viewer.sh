@@ -47,5 +47,5 @@ fi
 if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
     echo "clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${HIGHLIGHT} --line-range \${S}:\${E} \"${FILE_PATH}\" | ${BOOST}"
 else
-    echo "clear && ${BAT} \"${FILE_PATH}\""
+    echo "clear && ${BAT} --line-range 1:\$(tput lines) \"${FILE_PATH}\""
 fi
