@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# Wrap in main() so bash reads the entire script before executing.
+# This prevents curl|bash from having stdin consumed by subprocesses.
+main() {
+
 REPO="diananerd/idealize"
 BASE_URL="https://raw.githubusercontent.com/${REPO}/main"
 
@@ -169,7 +173,7 @@ if [[ ${#brew_installable[@]} -gt 0 ]]; then
         if ask_yn "Install missing required dependencies via brew? (${brew_installable[*]})" "y"; then
             for dep in "${brew_installable[@]}"; do
                 step "installing ${BOLD}${dep}${RESET}..."
-                if brew install "$dep" 2>/dev/null; then
+                if brew install "$dep" </dev/null >/dev/null 2>&1; then
                     ok "${dep} installed"
                     # Remove from missing list
                     MISSING_REQUIRED=("${MISSING_REQUIRED[@]/$dep/}")
@@ -191,7 +195,7 @@ if [[ ${#MISSING_OPTIONAL[@]} -gt 0 && "$HAS_BREW" == true ]]; then
     if ask_yn "Install optional dependencies? (${MISSING_OPTIONAL[*]})" "$opt_default"; then
         for dep in "${MISSING_OPTIONAL[@]}"; do
             step "installing ${BOLD}${dep}${RESET}..."
-            if brew install "$dep" 2>/dev/null; then
+            if brew install "$dep" </dev/null >/dev/null 2>&1; then
                 ok "${dep} installed"
             else
                 warn "failed to install ${dep} — skipping"
@@ -346,3 +350,7 @@ else
 fi
 echo -e "  ${DIM}Uninstall: idealyze uninstall${RESET}"
 echo ""
+
+} # end main
+
+main "$@"
