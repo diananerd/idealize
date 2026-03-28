@@ -262,6 +262,7 @@ download "${BASE_URL}/config/glow-style.json" "${INSTALL_DIR}/config/glow-style.
 # Store install metadata
 cat > "${INSTALL_DIR}/.install-meta" <<META
 mode=${INSTALL_MODE}
+channel=${CHANNEL}
 bin_dir=${BIN_DIR}
 install_dir=${INSTALL_DIR}
 installed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -271,7 +272,20 @@ META
 
 header "Configuring hooks"
 
-CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+if ! command -v claude &>/dev/null; then
+    skip "Claude Code not found — hook configuration skipped"
+    step "install Claude Code first, then run 'idealyze doctor' to configure hooks"
+else
+    ok "Claude Code detected"
+fi
+
+# Use project-level settings for project installs, user-level otherwise
+if [[ "$INSTALL_MODE" == "project" && -d ".claude" ]]; then
+    CLAUDE_SETTINGS="$(pwd)/.claude/settings.json"
+    step "using project-level Claude settings"
+else
+    CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+fi
 HOOK_CMD="bash ${INSTALL_DIR}/lib/hooks.sh"
 
 configure_hooks() {

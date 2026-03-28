@@ -49,7 +49,8 @@ This opens a 2-pane Ghostty window: broot file tree on the left and a code viewe
 | `idealyze toggle tree` | Show or hide the file tree sidebar |
 | `idealyze toggle agent` | Add or remove the agent pane |
 | `idealyze toggle render` | Switch viewer between raw and rendered mode |
-| `idealyze doctor` | Diagnose and fix dependencies |
+| `idealyze doctor` | Diagnose dependencies and check for updates |
+| `idealyze update` | Update to latest version from install channel |
 | `idealyze stop` | Close the session and Ghostty window |
 | `idealyze uninstall` | Remove Idealize, its hooks, and all files |
 

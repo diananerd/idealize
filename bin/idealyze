@@ -43,6 +43,7 @@ Usage:
     idealyze toggle agent          Add/remove the agent pane
     idealyze toggle render         Switch between raw and rendered viewer
     idealyze doctor                Diagnose and fix dependencies
+    idealyze update                Update to latest version from install channel
     idealyze stop                  Close session and Ghostty window
     idealyze uninstall             Remove idealyze completely
     idealyze --version             Show version
@@ -252,6 +253,25 @@ doctor() {
                     echo -e "  ${bad}  failed to install ${dep}"
                 fi
             done
+        fi
+    fi
+
+    # --- Version check ---
+    echo -e "\n${B}Version${N}"
+    echo -e "  ${ok}  ${VERSION} (installed)"
+    local channel="latest"
+    if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
+        local meta_channel
+        meta_channel=$(grep '^channel=' "${IDEALYZE_HOME}/.install-meta" 2>/dev/null | cut -d= -f2)
+        [[ -n "$meta_channel" ]] && channel="$meta_channel"
+    fi
+    local remote_ver
+    remote_ver=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/diananerd/idealize/${channel}/bin/idealyze" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2)
+    if [[ -n "$remote_ver" ]]; then
+        if [[ "$remote_ver" != "$VERSION" ]]; then
+            echo -e "  ${Y}!!${N}  ${remote_ver} available on ${channel} — run ${B}idealyze update${N}"
+        else
+            echo -e "  ${ok}  up to date (${channel})"
         fi
     fi
 
@@ -487,11 +507,50 @@ uninstall() {
     echo -e "\n  ${G}${B}Uninstalled${N} ${D}(${install_mode} mode)${N}\n"
 }
 
+update() {
+    # Detect current channel from install metadata
+    local channel="latest"
+    if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
+        local meta_channel
+        meta_channel=$(grep '^channel=' "${IDEALYZE_HOME}/.install-meta" 2>/dev/null | cut -d= -f2)
+        [[ -n "$meta_channel" ]] && channel="$meta_channel"
+    fi
+
+    echo "idealize: updating from ${channel} channel..."
+
+    # Download and run install.sh with --auto to preserve current setup
+    local install_url="https://raw.githubusercontent.com/diananerd/idealize/${channel}/install.sh"
+    local install_script
+    install_script=$(curl -fsSL "$install_url" 2>/dev/null) || {
+        echo "idealize: failed to download installer" >&2
+        exit 1
+    }
+    bash -c "$install_script" -- --auto ${channel:+--${channel}}
+}
+
+check_for_updates() {
+    # Quick background check — compare local version with remote
+    local channel="latest"
+    if [[ -f "${IDEALYZE_HOME}/.install-meta" ]]; then
+        local meta_channel
+        meta_channel=$(grep '^channel=' "${IDEALYZE_HOME}/.install-meta" 2>/dev/null | cut -d= -f2)
+        [[ -n "$meta_channel" ]] && channel="$meta_channel"
+    fi
+
+    local remote_version
+    remote_version=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/diananerd/idealize/${channel}/bin/idealyze" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2)
+
+    if [[ -n "$remote_version" && "$remote_version" != "$VERSION" ]]; then
+        echo "idealize: update available (${VERSION} → ${remote_version}). Run 'idealyze update'" >&2
+    fi
+}
+
 # --- Main ---
 
 case "${1:-}" in
     --version|-v)
         echo "idealyze ${VERSION}"
+        check_for_updates
         ;;
     --help|-h)
         usage
@@ -513,6 +572,9 @@ case "${1:-}" in
         ;;
     doctor)
         doctor
+        ;;
+    update)
+        update
         ;;
     stop)
         stop_session
