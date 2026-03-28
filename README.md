@@ -61,6 +61,33 @@ This opens a 2-pane Ghostty window: broot file tree on the left and a code viewe
 | `IDEALYZE_DEBUG=1` | Enable verbose logging to `~/.idealyze/debug.log` |
 | `IDEALYZE_AGENT_CMD=<cmd>` | Override agent command (default: claude) |
 
+## Configuration
+
+Idealize uses a JSON config file with 3-level resolution: project > user > built-in defaults.
+
+- **Project**: `.idealyze/config.json` in your project directory
+- **User**: `~/.idealyze/config.json`
+
+Only specify the keys you want to override. Example `~/.idealyze/config.json`:
+
+```json
+{
+  "provider": "claude-code",
+  "agent_cmd": "claude",
+  "scope": "project",
+  "viewer": {
+    "mode": "raw",
+    "highlight_color": "40;40;160"
+  },
+  "layout": {
+    "tree_shrink_2pane": 30,
+    "resize_step": 10
+  }
+}
+```
+
+See `lib/config-defaults.json` for all available keys.
+
 ## How It Works
 
 Idealize is event-driven. No background daemons besides a lightweight viewer loop.
