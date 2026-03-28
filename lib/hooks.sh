@@ -14,11 +14,10 @@ if [[ ! -f "$SESSION_FILE" ]]; then
     exit 0
 fi
 
-# Debug helper — always log (session exists so directory is guaranteed)
+# Debug helper — gated on IDEALYZE_DEBUG to avoid unbounded log growth
 debug() {
-    echo "[hooks $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG"
+    [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && echo "[hooks $(date +%H:%M:%S)] $*" >> "$DEBUG_LOG" || true
 }
-debug "--- hook invoked ---"
 
 # Read session state (single jq call)
 read -r VIEWER_MODE VIEWER_ID PROJECT_DIR SCOPE < <(jq -r '[.viewer_mode // "bat", (.panes.viewer // "" | tostring), .project_dir // "", .scope // "project"] | @tsv' "$SESSION_FILE")

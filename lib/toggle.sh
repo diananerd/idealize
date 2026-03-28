@@ -98,21 +98,13 @@ case "$ACTION" in
         fi
         mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
 
-        # Re-render current file with new mode if one is active
+        # Re-render current file with new mode via viewer-cmd (consistent with hooks path)
         if [[ -n "$CURRENT_FILE" && -f "$CURRENT_FILE" ]]; then
             VIEWER_CMD=$("$LIB_DIR/viewer.sh" "$CURRENT_FILE" "$CURRENT_LINE" "$NEW_MODE")
             debug "viewer_cmd=$VIEWER_CMD"
             if [[ -n "$VIEWER_CMD" ]]; then
-                ESCAPED_CMD=$(printf '%s' "$VIEWER_CMD" | sed 's/\\/\\\\/g; s/"/\\"/g')
-                osascript -e "
-                    tell application \"Ghostty\"
-                        set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
-                        input text \"${ESCAPED_CMD}\n\" to viewerTerm
-                    end tell
-                " 2>"${IDEALYZE_DIR}/osascript-error.log" || {
-                    echo "idealize: failed to send viewer command — $(cat "${IDEALYZE_DIR}/osascript-error.log" 2>/dev/null || echo 'unknown osascript error')" >&2
-                    exit 1
-                }
+                printf '%s' "$VIEWER_CMD" > "${IDEALYZE_DIR}/viewer-cmd.tmp"
+                mv "${IDEALYZE_DIR}/viewer-cmd.tmp" "${IDEALYZE_DIR}/viewer-cmd"
             fi
         fi
 
@@ -120,49 +112,48 @@ case "$ACTION" in
         debug "switched to $NEW_MODE"
         ;;
 
-    claude)
-        CLAUDE_ID=$(jq -r '.panes.claude // "" | tostring' "$SESSION_FILE")
+    agent)
+        AGENT_ID=$(jq -r '.panes.agent // "" | tostring' "$SESSION_FILE")
         VIEWER_ID=$(jq -r '.panes.viewer // "" | tostring' "$SESSION_FILE")
-        debug "claude_id=$CLAUDE_ID viewer_id=$VIEWER_ID"
+        AGENT_CMD=$(jq -r '.agent_cmd // "claude"' "$SESSION_FILE")
+        debug "agent_id=$AGENT_ID viewer_id=$VIEWER_ID agent_cmd=$AGENT_CMD"
 
         [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
 
-        if [[ -z "$CLAUDE_ID" ]]; then
-            # Add Claude pane: split right from viewer
-            debug "adding claude pane"
+        if [[ -z "$AGENT_ID" ]]; then
+            debug "adding agent pane (cmd=$AGENT_CMD)"
             project_dir=$(jq -r '.project_dir' "$SESSION_FILE")
             NEW_IDS=$(osascript -e "
                 tell application \"Ghostty\"
                     set cfg to new surface configuration
                     set initial working directory of cfg to \"${project_dir}\"
                     set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
-                    set claudeTerm to split viewerTerm direction right with configuration cfg
-                    input text \"claude\n\" to claudeTerm
-                    return id of claudeTerm
+                    set agentTerm to split viewerTerm direction right with configuration cfg
+                    input text \"${AGENT_CMD}\n\" to agentTerm
+                    return id of agentTerm
                 end tell
             " 2>"${IDEALYZE_DIR}/osascript-error.log") || {
-                echo "idealize: failed to add claude pane" >&2; exit 1
+                echo "idealize: failed to add agent pane" >&2; exit 1
             }
-            debug "new claude_id=$NEW_IDS"
-            jq --arg c "$NEW_IDS" '.panes.claude = $c' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
-            echo "idealize: claude pane added"
+            debug "new agent_id=$NEW_IDS"
+            jq --arg a "$NEW_IDS" '.panes.agent = $a' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            echo "idealize: agent pane added (${AGENT_CMD})"
         else
-            # Remove Claude pane: close it
-            debug "removing claude pane"
-            [[ "$CLAUDE_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid claude id" >&2; exit 1; }
+            debug "removing agent pane"
+            [[ "$AGENT_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid agent id" >&2; exit 1; }
             osascript -e "
                 tell application \"Ghostty\"
-                    set claudeTerm to first terminal whose id is \"${CLAUDE_ID}\"
-                    perform action \"close_surface\" on claudeTerm
+                    set agentTerm to first terminal whose id is \"${AGENT_ID}\"
+                    perform action \"close_surface\" on agentTerm
                 end tell
             " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
-            jq '.panes.claude = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
-            echo "idealize: claude pane removed"
+            jq '.panes.agent = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            echo "idealize: agent pane removed"
         fi
         ;;
 
     *)
-        echo "Usage: idealyze toggle tree|claude|preview" >&2
+        echo "Usage: idealyze toggle tree|agent|preview" >&2
         exit 1
         ;;
 esac

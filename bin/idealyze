@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# idealyze — Terminal IDE for Claude Code
+# idealyze — Terminal IDE companion for AI coding agents
 # https://github.com/diananerd/idealize
 
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 IDEALYZE_HOME="${HOME}/.idealyze"
 SESSION_FILE="${IDEALYZE_HOME}/session.json"
 DEBUG_LOG="${IDEALYZE_HOME}/debug.log"
@@ -32,22 +32,27 @@ fi
 
 usage() {
     cat <<'EOF'
-idealyze — Terminal IDE for Claude Code
+idealyze — Terminal IDE companion for AI coding agents
 
 Usage:
-    idealyze                  Launch IDE layout (tree + viewer)
-    idealyze --with-claude    Launch with embedded Claude pane
-    idealyze --global         Capture events from all projects
-    idealyze toggle tree      Collapse/restore file tree sidebar
-    idealyze toggle claude    Add/remove Claude pane
-    idealyze toggle preview   Switch between bat and glow viewer
-    idealyze stop             Close session
-    idealyze uninstall        Remove idealyze completely
-    idealyze --version        Show version
-    idealyze --help           Show this help
+    idealyze                       Launch IDE layout (tree + viewer)
+    idealyze --with-agent          Launch with agent pane (default: claude)
+    idealyze --with-agent CMD      Launch with custom agent command
+    idealyze --global              Capture events from all projects
+    idealyze toggle tree           Collapse/restore file tree sidebar
+    idealyze toggle agent          Add/remove the agent pane
+    idealyze toggle preview        Switch between bat and glow viewer
+    idealyze stop                  Close session and Ghostty window
+    idealyze uninstall             Remove idealyze completely
+    idealyze --version             Show version
+    idealyze --help                Show this help
 
-Requirements: Ghostty 1.3+, broot, bat, claude, jq
-Optional: glow (for markdown preview)
+Environment:
+    IDEALYZE_DEBUG=1               Enable verbose logging to ~/.idealyze/debug.log
+    IDEALYZE_AGENT_CMD=<cmd>       Override agent command (default: claude)
+
+Requirements: macOS, Ghostty 1.3+, broot, bat, jq
+Optional: glow (markdown preview)
 EOF
 }
 
@@ -56,7 +61,6 @@ check_deps() {
     command -v osascript &>/dev/null || missing+=("osascript (macOS)")
     command -v broot &>/dev/null || missing+=("broot")
     command -v bat &>/dev/null || missing+=("bat")
-    command -v claude &>/dev/null || missing+=("claude")
     command -v jq &>/dev/null || missing+=("jq")
 
     if [[ ${#missing[@]} -gt 0 ]]; then
@@ -64,13 +68,11 @@ check_deps() {
         exit 1
     fi
 
-    # Check Ghostty is installed
     if [[ ! -d "/Applications/Ghostty.app" ]]; then
         echo "idealize: Ghostty.app not found in /Applications" >&2
         exit 1
     fi
 
-    # Optional: glow
     if ! command -v glow &>/dev/null; then
         echo "idealize: glow not found (optional — preview mode will use bat)" >&2
     fi
@@ -81,11 +83,9 @@ launch() {
 
     # Check for existing session
     if [[ -f "$SESSION_FILE" ]]; then
-        # Verify the session is still alive by checking if the Ghostty window exists
         local win_id
         win_id=$(jq -r '.panes.window // empty' "$SESSION_FILE")
         if [[ -n "$win_id" ]] && [[ "$win_id" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
-            # Try to query the window — if it fails, session is stale
             if ! osascript -e "
                 tell application \"Ghostty\"
                     first window whose id is \"${win_id}\"
@@ -109,50 +109,53 @@ launch() {
     debug "launching in $project_dir"
     debug "LIB_DIR=$LIB_DIR CONFIG_DIR=$CONFIG_DIR"
 
-    # Create session directory
     mkdir -p "$IDEALYZE_HOME"
 
-    # Clear previous debug log on fresh launch
     [[ "${IDEALYZE_DEBUG:-}" == "1" ]] && : > "$DEBUG_LOG"
     debug "=== new session $(date) ==="
 
-    # Run AppleScript layout — returns JSON with terminal IDs
+    # Resolve agent command
+    local agent_cmd="${IDEALYZE_AGENT_CMD:-claude}"
+    local with_agent="${IDEALYZE_WITH_AGENT:-}"
+
+    # Run AppleScript layout
     local pane_json
     debug "running layout.applescript..."
     local layout_args=("$project_dir" "$LIB_DIR" "${CONFIG_DIR}/broot-sidebar.toml")
-    [[ "${IDEALYZE_WITH_CLAUDE:-}" != "1" ]] && layout_args+=("no-claude")
+    if [[ -z "$with_agent" ]]; then
+        layout_args+=("no-agent")
+    else
+        layout_args+=("$agent_cmd")
+    fi
     pane_json=$(osascript "${LIB_DIR}/layout.applescript" "${layout_args[@]}") || { debug "layout.applescript FAILED"; echo "idealize: layout creation failed" >&2; exit 1; }
     debug "pane_json: $pane_json"
 
     # Build session.json
-    local window_id viewer_id tree_id claude_id
+    local window_id viewer_id tree_id agent_id
     window_id=$(echo "$pane_json" | jq -r '.window_id')
     tree_id=$(echo "$pane_json" | jq -r '.tree_id')
     viewer_id=$(echo "$pane_json" | jq -r '.viewer_id')
-    claude_id=$(echo "$pane_json" | jq -r '.claude_id')
-    debug "IDs: window=$window_id tree=$tree_id viewer=$viewer_id claude=$claude_id"
+    agent_id=$(echo "$pane_json" | jq -r '.agent_id')
+    debug "IDs: window=$window_id tree=$tree_id viewer=$viewer_id agent=$agent_id"
 
-    cat > "$SESSION_FILE" <<SESSIONEOF
-{
-    "version": "${VERSION}",
-    "pid": $$,
-    "project_dir": "${project_dir}",
-    "scope": "${IDEALYZE_SCOPE:-project}",
-    "broot_socket": "idealyze",
-    "viewer_mode": "bat",
-    "tree_visible": true,
-    "current_file": null,
-    "current_line": 1,
-    "panes": {
-        "window": "${window_id}",
-        "tree": "${tree_id}",
-        "viewer": "${viewer_id}",
-        "claude": "${claude_id}"
-    }
-}
-SESSIONEOF
+    jq -n \
+        --arg ver "$VERSION" \
+        --argjson pid $$ \
+        --arg pd "$project_dir" \
+        --arg scope "${IDEALYZE_SCOPE:-project}" \
+        --arg acmd "$agent_cmd" \
+        --arg wid "$window_id" \
+        --arg tid "$tree_id" \
+        --arg vid "$viewer_id" \
+        --arg aid "$agent_id" \
+        '{
+            version: $ver, pid: $pid, project_dir: $pd, scope: $scope,
+            agent_cmd: $acmd, broot_socket: "idealyze", viewer_mode: "bat",
+            tree_visible: true, current_file: null, current_line: 1,
+            panes: { window: $wid, tree: $tid, viewer: $vid, agent: $aid }
+        }' > "$SESSION_FILE"
 
-    echo "idealize: ready. Claude hooks will sync automatically."
+    echo "idealize: ready. Hooks will sync automatically."
 }
 
 stop_session() {
@@ -161,7 +164,6 @@ stop_session() {
         exit 0
     fi
 
-    # Close the Ghostty window
     local win_id
     win_id=$(jq -r '.panes.window // empty' "$SESSION_FILE")
     if [[ -n "$win_id" ]]; then
@@ -169,16 +171,14 @@ stop_session() {
         osascript -e "
             tell application \"Ghostty\"
                 try
-                    close (first window whose id is \"${win_id}\")
+                    set w to first window whose id is \"${win_id}\"
+                    perform action \"close_window\" on terminal 1 of selected tab of w
                 end try
             end tell
         " >/dev/null 2>/dev/null || true
     fi
 
-    # Clean up broot socket
     rm -f "/tmp/broot-server-idealyze.sock"
-
-    # Remove session file
     rm -f "$SESSION_FILE"
 
     echo "idealize: session closed"
@@ -196,10 +196,9 @@ uninstall() {
     # Remove hooks from Claude settings
     local claude_settings="${HOME}/.claude/settings.json"
     if [[ -f "$claude_settings" ]]; then
-        # Remove idealize hook entries
         jq 'if .hooks.PostToolUse then
             .hooks.PostToolUse |= map(
-                select(.hooks | all(.command | test("idealyze") | not))
+                select(.hooks | all(.command | test("idealyze|idealize|hooks\\.sh") | not))
             ) |
             if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end |
             if .hooks | length == 0 then del(.hooks) else . end
@@ -208,17 +207,31 @@ uninstall() {
         echo "  removed hooks from ${claude_settings}"
     fi
 
-    # Remove idealyze home
+    # Detect install mode from metadata
+    local install_meta="${IDEALYZE_HOME}/.install-meta"
+    local install_mode="user"
+    local bin_dir="${HOME}/.local/bin"
+    if [[ -f "$install_meta" ]]; then
+        install_mode=$(grep '^mode=' "$install_meta" | cut -d= -f2)
+        bin_dir=$(grep '^bin_dir=' "$install_meta" | cut -d= -f2)
+    fi
+
+    # Also check for project-level install in cwd
+    if [[ -d "$(pwd)/.idealyze" && -f "$(pwd)/.idealyze/.install-meta" ]]; then
+        install_mode="project"
+        IDEALYZE_HOME="$(pwd)/.idealyze"
+        bin_dir=$(grep '^bin_dir=' "$(pwd)/.idealyze/.install-meta" | cut -d= -f2)
+    fi
+
     rm -rf "$IDEALYZE_HOME"
     echo "  removed ${IDEALYZE_HOME}"
 
-    # Remove binary (self-delete)
-    local self_path
-    self_path="$(realpath "$0")"
-    echo "  removing ${self_path}"
-    rm -f "$self_path"
+    if [[ -n "$bin_dir" && -f "${bin_dir}/idealyze" ]]; then
+        rm -f "${bin_dir}/idealyze"
+        echo "  removed ${bin_dir}/idealyze"
+    fi
 
-    echo "idealize: uninstalled"
+    echo "idealize: uninstalled (${install_mode} mode)"
 }
 
 # --- Main ---
@@ -231,7 +244,6 @@ case "${1:-}" in
         usage
         ;;
     --hook)
-        # Internal: called by Claude hooks
         shift
         case "${1:-}" in
             post-tool-use)
@@ -256,8 +268,9 @@ case "${1:-}" in
     --global)
         IDEALYZE_SCOPE="global" launch
         ;;
-    --with-claude)
-        IDEALYZE_WITH_CLAUDE="1" launch
+    --with-agent)
+        shift
+        IDEALYZE_WITH_AGENT="1" IDEALYZE_AGENT_CMD="${1:-claude}" launch
         ;;
     "")
         launch

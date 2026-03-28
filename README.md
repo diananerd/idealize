@@ -1,23 +1,23 @@
 # Idealize: IDE-alize your Claude Code
 
-Watch Claude Code work in real time — file tree, code viewer, and Claude side by side in Ghostty. A lightweight, event-driven IDE experience.
+Watch Claude Code work in real time — file tree and code viewer side by side in Ghostty. A lightweight, event-driven IDE companion.
 
 ```
-┌──────────┬────────────────────────┬──────────────┐
-│          │                        │              │
-│  tree    │    code viewer         │  claude code │
-│  (broot) │    (bat / glow)        │              │
-│          │                        │              │
-└──────────┴────────────────────────┴──────────────┘
+┌──────────┬─────────────────────────────────────┐
+│          │                                     │
+│  tree    │         code viewer                 │
+│  (broot) │         (bat / glow)                │
+│          │                                     │
+└──────────┴─────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh | bash
 ```
 
-The installer downloads Idealize to `~/.local/bin/`, configures a `PostToolUse` hook in `~/.claude/settings.json`, and checks your dependencies. If `~/.local/bin` isn't in your PATH, it will tell you how to add it.
+The installer downloads Idealize to `~/.local/bin/`, configures a `PostToolUse` hook in `~/.claude/settings.json`, and checks your dependencies.
 
 Then, from any project directory:
 
@@ -25,40 +25,45 @@ Then, from any project directory:
 idealyze
 ```
 
-This opens a 3-pane Ghostty window with broot on the left, a code viewer in the center, and Claude Code on the right. As Claude reads, edits, and navigates files, the tree and viewer update instantly.
+This opens a 2-pane Ghostty window: broot file tree on the left and a code viewer on the right. As Claude reads, edits, and navigates files in any terminal, the tree and viewer update instantly.
 
-## ✨ What You Get
+## What You Get
 
 - **Live file tracking** — every Read, Edit, Write, Glob, and Grep updates the tree and viewer
-- **Line highlighting** — the viewer jumps to the exact line Claude is working on
+- **Line highlighting** — the viewer jumps to the exact line Claude is working on, with multi-line block highlights for edits
+- **Project scoping** — only reacts to files in the current project (use `--global` to track everything)
 - **Markdown preview** — toggle between syntax-highlighted code (bat) and rendered markdown (glow)
 - **Collapsible tree** — hide the sidebar when you need more space
-- **Zero overhead when idle** — hooks exit in <1ms if no Idealize session is running
+- **Optional Claude pane** — add an embedded Claude terminal on demand
+- **Resize-aware** — viewer re-renders automatically when you resize panes
+- **Zero overhead when idle** — hooks exit immediately if no Idealize session is running
 
-## 💻 Commands
+## Commands
 
 | Command | What it does |
 |---|---|
-| `idealyze` | Launch the IDE layout in the current directory |
-| `idealyze --global` | Launch with global scope (track files outside the project too) |
+| `idealyze` | Launch IDE layout (tree + viewer) |
+| `idealyze --with-claude` | Launch with an embedded Claude pane |
+| `idealyze --global` | Track files outside the project too |
 | `idealyze toggle tree` | Collapse or restore the file tree sidebar |
+| `idealyze toggle claude` | Add or remove the Claude pane |
 | `idealyze toggle preview` | Switch the viewer between bat and glow |
-| `idealyze stop` | Close the session and clean up |
+| `idealyze stop` | Close the session and Ghostty window |
 | `idealyze uninstall` | Remove Idealize, its hooks, and all files |
 
 Set `IDEALYZE_DEBUG=1` before launching to enable verbose logging to `~/.idealyze/debug.log`.
 
-## ⚙️ How It Works
+## How It Works
 
 Idealize is event-driven. No background daemons besides a lightweight viewer loop.
 
-1. `idealyze` creates a Ghostty window with 3 panes via AppleScript
-2. Claude Code runs in the right pane; a viewer loop watches for render commands in the center pane
-3. When Claude uses a file tool, the `PostToolUse` hook fires
+1. `idealyze` creates a Ghostty window with panes via AppleScript
+2. A viewer loop watches for render commands in the viewer pane
+3. When Claude uses a file tool (in any terminal), the `PostToolUse` hook fires
 4. The hook updates broot via socket IPC and writes a render command to `~/.idealyze/viewer-cmd`
 5. The viewer loop picks up the command and re-renders bat/glow, including on terminal resize
 
-## 📋 Requirements
+## Requirements
 
 - macOS (uses AppleScript)
 - [Ghostty](https://ghostty.org) 1.3+
@@ -68,15 +73,10 @@ Idealize is event-driven. No background daemons besides a lightweight viewer loo
 - [jq](https://jqlang.github.io/jq/)
 - [glow](https://github.com/charmbracelet/glow) (optional, for markdown preview)
 
-## 📖 Documentation
+## Documentation
 
 - [Design](docs/design.md) — architecture, pane layout, and IPC model
-- [Plan](docs/plan.md) — roadmap and implementation plan
 
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to open an issue or submit a pull request.
-
-## 📄 License
+## License
 
 MIT

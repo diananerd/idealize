@@ -41,7 +41,7 @@ fi
 # Validate LINE_NUMBER is numeric to prevent injection in arithmetic
 [[ "$LINE_NUMBER" =~ ^[0-9]+$ ]] || LINE_NUMBER=""
 
-BAT="bat --paging=never --wrap=auto --terminal-width=\$(tput cols) --style=numbers,header,grid --color=always"
+BAT="bat --paging=never --wrap=auto --style=numbers,header,grid --color=always"
 
 # Boost bat's highlight color from dim gray (51,51,51) to vivid blue (40,40,160)
 # Must replace both "48;2;51;51;51;" (bg+fg combined) and "48;2;51;51;51m" (bg only)
@@ -59,8 +59,8 @@ if [[ -n "$LINE_NUMBER" && "$LINE_NUMBER" != "0" ]]; then
     # Terminal-height window centered on the target line
     CMD="clear && H=\$(tput lines); S=\$(( ${LINE_NUMBER} > H/2 ? ${LINE_NUMBER} - H/2 : 1 )); E=\$(( S + H - 3 )); ${BAT} --highlight-line ${HIGHLIGHT} --line-range \${S}:\${E} \"${FILE_PATH}\" | ${BOOST}"
 else
-    # No specific line — show from top, capped to terminal height
-    CMD="clear && ${BAT} --line-range 1:\$(tput lines) \"${FILE_PATH}\""
+    # No specific line — show full file
+    CMD="clear && ${BAT} \"${FILE_PATH}\""
 fi
 
 debug "cmd: $CMD"
