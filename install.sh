@@ -81,9 +81,11 @@ echo -e "${BOLD}  idealize${RESET} ${DIM}— terminal IDE companion for AI codin
 echo -e "${DIM}  https://github.com/diananerd/idealize${RESET}"
 echo ""
 
-# --- Platform check ---
+# --- System checks ---
 
-[[ "$(uname -s)" == "Darwin" ]] || fail "idealize requires macOS (uses AppleScript + Ghostty)"
+[[ "$(uname -s)" == "Darwin" ]] || fail "idealize requires macOS"
+command -v curl &>/dev/null || fail "curl is required"
+command -v jq &>/dev/null || fail "jq is required (brew install jq)"
 
 # --- Install mode ---
 
@@ -108,6 +110,17 @@ else
     BIN_DIR="${HOME}/.local/bin"
     step "user mode: ${BOLD}${INSTALL_DIR}${RESET}"
 fi
+
+# Writable check
+mkdir -p "$BIN_DIR" 2>/dev/null || fail "cannot write to ${BIN_DIR}"
+mkdir -p "$INSTALL_DIR" 2>/dev/null || fail "cannot write to ${INSTALL_DIR}"
+
+# Connectivity check
+step "checking connectivity..."
+if ! curl -fsSL --max-time 5 "${BASE_URL}/bin/idealyze" -o /dev/null 2>/dev/null; then
+    fail "cannot reach GitHub — check your network"
+fi
+ok "GitHub reachable"
 
 # --- Cleanup trap ---
 
@@ -259,6 +272,15 @@ chmod +x "${INSTALL_DIR}"/lib/*.sh
 download "${BASE_URL}/config/broot-sidebar.toml" "${INSTALL_DIR}/config/broot-sidebar.toml" "config/broot-sidebar.toml"
 download "${BASE_URL}/config/glow-style.json" "${INSTALL_DIR}/config/glow-style.json" "config/glow-style.json"
 
+# Config loader
+download "${BASE_URL}/lib/config.sh" "${INSTALL_DIR}/lib/config.sh" "lib/config.sh"
+download "${BASE_URL}/lib/config-defaults.json" "${INSTALL_DIR}/lib/config-defaults.json" "lib/config-defaults.json"
+
+# Providers
+mkdir -p "${INSTALL_DIR}/lib/providers"
+download "${BASE_URL}/lib/providers/claude-code.sh" "${INSTALL_DIR}/lib/providers/claude-code.sh" "lib/providers/claude-code.sh"
+chmod +x "${INSTALL_DIR}/lib/providers/"*.sh
+
 # Store install metadata
 cat > "${INSTALL_DIR}/.install-meta" <<META
 mode=${INSTALL_MODE}
@@ -272,62 +294,29 @@ META
 
 header "Configuring hooks"
 
-if ! command -v claude &>/dev/null; then
-    skip "Claude Code not found — hook configuration skipped"
-    step "install Claude Code first, then run 'idealyze doctor' to configure hooks"
-else
-    ok "Claude Code detected"
-fi
+# Source the provider for hook configuration
+source "${INSTALL_DIR}/lib/providers/claude-code.sh"
 
-# Use project-level settings for project installs, user-level otherwise
-if [[ "$INSTALL_MODE" == "project" && -d ".claude" ]]; then
-    CLAUDE_SETTINGS="$(pwd)/.claude/settings.json"
-    step "using project-level Claude settings"
-else
-    CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
-fi
-HOOK_CMD="bash ${INSTALL_DIR}/lib/hooks.sh"
-
-configure_hooks() {
-    if [[ -f "$CLAUDE_SETTINGS" ]]; then
-        if ! jq empty "$CLAUDE_SETTINGS" 2>/dev/null; then
-            warn "${CLAUDE_SETTINGS} has invalid JSON — skipping"
-            warn "fix it manually, then re-run the installer"
-            return
+if provider_is_installed; then
+    ok "$(provider_name) detected"
+    if ask_yn "Configure $(provider_name) hooks?" "y"; then
+        HOOK_CMD="bash ${INSTALL_DIR}/lib/hooks.sh"
+        if [[ "$INSTALL_MODE" == "project" && -d ".claude" ]]; then
+            hook_mode="project"
+            step "using project-level settings"
+        else
+            hook_mode="user"
         fi
-        if jq -e --arg cmd "$HOOK_CMD" \
-            '.hooks.PostToolUse[]?.hooks[]? | select(.command == $cmd)' \
-            "$CLAUDE_SETTINGS" &>/dev/null; then
-            ok "hooks already configured"
-            return
+        if provider_install_hooks "$HOOK_CMD" "$hook_mode"; then
+            ok "hooks configured"
+        else
+            warn "failed to configure hooks"
         fi
-        cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak"
-        jq --arg cmd "$HOOK_CMD" '
-            .hooks //= {} |
-            .hooks.PostToolUse //= [] |
-            .hooks.PostToolUse += [{
-                "matcher": "Read|Edit|Write|Glob|Grep",
-                "hooks": [{ "type": "command", "command": $cmd }]
-            }]
-        ' "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" \
-            && mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
-        ok "hooks added ${DIM}(backup: settings.json.bak)${RESET}"
     else
-        mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
-        jq -n --arg cmd "$HOOK_CMD" '{
-            hooks: { PostToolUse: [{
-                matcher: "Read|Edit|Write|Glob|Grep",
-                hooks: [{ type: "command", command: $cmd }]
-            }] }
-        }' > "$CLAUDE_SETTINGS"
-        ok "created ${CLAUDE_SETTINGS}"
+        skip "hooks — skipped"
     fi
-}
-
-if ask_yn "Configure Claude Code hooks?" "y"; then
-    configure_hooks
 else
-    skip "hooks — skipped (you can configure them manually later)"
+    skip "$(provider_name) not found — install it later and run 'idealyze doctor'"
 fi
 
 # --- Ghostty config ---
