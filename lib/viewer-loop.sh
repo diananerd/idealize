@@ -93,10 +93,18 @@ while true; do
         fi
     fi
 
-    # Handle deferred WINCH render (signal sets flag, loop does the render)
+    # Handle deferred WINCH render with debounce
+    # Wait for resize to settle (no more WINCHes) before rendering
     if [[ "$RENDER_REQUESTED" == true ]]; then
         RENDER_REQUESTED=false
-        debug "deferred WINCH render: cols=$(tput cols 2>/dev/null)"
+        # Debounce: wait a short period, if another WINCH comes, skip this render
+        sleep 0.15 &
+        wait $! 2>/dev/null || true
+        if [[ "$RENDER_REQUESTED" == true ]]; then
+            # Another WINCH came during debounce, skip — next loop will handle it
+            continue
+        fi
+        debug "WINCH render: cols=$(tput cols 2>/dev/null)"
         render
     fi
 
