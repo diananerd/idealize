@@ -4,9 +4,12 @@
 
 set -euo pipefail
 
+LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${LIB_DIR}/config.sh"
+config_load
+
 IDEALYZE_DIR="${HOME}/.idealyze"
 SESSION_FILE="${IDEALYZE_DIR}/session.json"
-LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEBUG_LOG="${IDEALYZE_DIR}/debug.log"
 
 debug() {
@@ -21,7 +24,7 @@ notify_viewer_resize() {
         vpid=$(cat "$pid_file" 2>/dev/null)
         if [[ -n "$vpid" ]] && kill -0 "$vpid" 2>/dev/null; then
             # Small delay for pane resize to settle, then signal
-            (sleep 0.5 && kill -WINCH "$vpid" 2>/dev/null) &
+            (sleep "$(cfg layout.resize_settle_delay 0.5)" && kill -WINCH "$vpid" 2>/dev/null) &
         fi
     fi
 }
@@ -67,16 +70,20 @@ case "$ACTION" in
             elif [[ -d "$LIB_DIR/../config" ]]; then
                 BROOT_CONF="$(cd "$LIB_DIR/../config" && pwd)/broot-sidebar.toml"
             fi
+            local shrink_restore step broot_socket
+            shrink_restore=$(cfg_int "layout.tree_shrink_restore" "30")
+            step=$(cfg_int "layout.resize_step" "10")
+            broot_socket=$(cfg "broot_socket" "idealyze")
             NEW_TREE_ID=$(osascript -e "
                 tell application \"Ghostty\"
                     set cfg to new surface configuration
                     set initial working directory of cfg to \"${PROJECT_DIR}\"
                     set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
                     set treeTerm to split viewerTerm direction left with configuration cfg
-                    repeat 30 times
-                        perform action \"resize_split:left,10\" on treeTerm
+                    repeat ${shrink_restore} times
+                        perform action \"resize_split:left,${step}\" on treeTerm
                     end repeat
-                    input text \"broot --conf ${BROOT_CONF} --listen idealyze ${PROJECT_DIR}\n\" to treeTerm
+                    input text \"broot --conf ${BROOT_CONF} --listen ${broot_socket} ${PROJECT_DIR}\n\" to treeTerm
                     return id of treeTerm
                 end tell
             " 2>"${IDEALYZE_DIR}/osascript-error.log") || {
@@ -140,7 +147,7 @@ case "$ACTION" in
     agent)
         AGENT_ID=$(jq -r '.panes.agent // "" | tostring' "$SESSION_FILE")
         VIEWER_ID=$(jq -r '.panes.viewer // "" | tostring' "$SESSION_FILE")
-        AGENT_CMD=$(jq -r '.agent_cmd // "claude"' "$SESSION_FILE")
+        AGENT_CMD=$(cfg "agent_cmd" "claude")
         debug "agent_id=$AGENT_ID viewer_id=$VIEWER_ID agent_cmd=$AGENT_CMD"
 
         [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
