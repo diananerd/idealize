@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Idealize installer
-# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/diananerd/idealize/main/install.sh)
+# Usage: bash <(curl -fsSL https://idealize.diananerd.com/install.sh)
 #
 # Flags:
 #   --user      Install for current user (default)
