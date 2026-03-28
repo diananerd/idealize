@@ -186,7 +186,7 @@ fi
 # --- Install missing optional deps ---
 
 if [[ ${#MISSING_OPTIONAL[@]} -gt 0 && "$HAS_BREW" == true ]]; then
-    local opt_default="n"
+    opt_default="n"
     [[ "$AUTO" == true ]] && opt_default="y"
     if ask_yn "Install optional dependencies? (${MISSING_OPTIONAL[*]})" "$opt_default"; then
         for dep in "${MISSING_OPTIONAL[@]}"; do
