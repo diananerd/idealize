@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 IDEALYZE_HOME="${HOME}/.idealyze"
 SESSION_FILE="${IDEALYZE_HOME}/session.json"
 DEBUG_LOG="${IDEALYZE_HOME}/debug.log"
