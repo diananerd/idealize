@@ -163,42 +163,66 @@ case "$ACTION" in
         ;;
 
     agent)
-        AGENT_ID=$(jq -r '.panes.agent // "" | tostring' "$SESSION_FILE")
-        VIEWER_ID=$(jq -r '.panes.viewer // "" | tostring' "$SESSION_FILE")
+        AGENT_ID=$(jq -r '.panes.agent // ""' "$SESSION_FILE")
+        WIN_ID=$(jq -r '.panes.window // ""' "$SESSION_FILE")
         AGENT_CMD=$(cfg "agent_cmd" "claude")
-        debug "agent_id=$AGENT_ID viewer_id=$VIEWER_ID agent_cmd=$AGENT_CMD"
+        debug "agent_id=$AGENT_ID win=$WIN_ID agent_cmd=$AGENT_CMD"
 
-        [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session" >&2; exit 1; }
+        [[ "$WIN_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid session (no window)" >&2; exit 1; }
 
         if [[ -z "$AGENT_ID" ]]; then
             debug "adding agent pane (cmd=$AGENT_CMD)"
             project_dir=$(jq -r '.project_dir' "$SESSION_FILE")
-            NEW_IDS=$(osascript -e "
+            # Read fresh viewer ID from Ghostty
+            VIEWER_ID=$(osascript -e "
+                tell application \"Ghostty\"
+                    set w to first window whose id is \"${WIN_ID}\"
+                    -- Get the last terminal (rightmost = viewer when no agent)
+                    set terms to terminals of selected tab of w
+                    return id of last item of terms
+                end tell
+            " 2>/dev/null) || true
+            debug "fresh viewer_id=$VIEWER_ID"
+            [[ "$VIEWER_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: cannot find viewer pane" >&2; exit 1; }
+
+            RESULT=$(osascript -e "
                 tell application \"Ghostty\"
                     set cfg to new surface configuration
                     set initial working directory of cfg to \"${project_dir}\"
                     set viewerTerm to first terminal whose id is \"${VIEWER_ID}\"
                     set agentTerm to split viewerTerm direction right with configuration cfg
                     input text \"${AGENT_CMD}\n\" to agentTerm
-                    return id of agentTerm
+                    return (id of agentTerm) & \"|\" & (id of viewerTerm)
                 end tell
             " 2>"${IDEALYZE_DIR}/osascript-error.log") || {
                 echo "idealize: failed to add agent pane" >&2; exit 1
             }
-            debug "new agent_id=$NEW_IDS"
-            jq --arg a "$NEW_IDS" '.panes.agent = $a' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            NEW_AGENT_ID="${RESULT%%|*}"
+            NEW_VIEWER_ID="${RESULT##*|}"
+            debug "new agent_id=$NEW_AGENT_ID viewer_id=$NEW_VIEWER_ID"
+            jq --arg a "$NEW_AGENT_ID" --arg v "$NEW_VIEWER_ID" '.panes.agent = $a | .panes.viewer = $v' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
             echo "idealize: agent pane added (${AGENT_CMD})"
             notify_viewer_resize
         else
             debug "removing agent pane"
             [[ "$AGENT_ID" =~ ^[a-zA-Z0-9_.@-]+$ ]] || { echo "idealize: invalid agent id" >&2; exit 1; }
-            osascript -e "
+            NEW_VIEWER_ID=$(osascript -e "
                 tell application \"Ghostty\"
                     set agentTerm to first terminal whose id is \"${AGENT_ID}\"
                     perform action \"close_surface\" on agentTerm
+                    delay 0.3
+                    set w to first window whose id is \"${WIN_ID}\"
+                    -- After closing agent, the last terminal is viewer
+                    set terms to terminals of selected tab of w
+                    return id of last item of terms
                 end tell
-            " >/dev/null 2>"${IDEALYZE_DIR}/osascript-error.log" || true
-            jq '.panes.agent = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            " 2>"${IDEALYZE_DIR}/osascript-error.log") || true
+            debug "viewer_id after agent close: $NEW_VIEWER_ID"
+            if [[ -n "$NEW_VIEWER_ID" ]]; then
+                jq --arg v "$NEW_VIEWER_ID" '.panes.agent = "" | .panes.viewer = $v' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            else
+                jq '.panes.agent = ""' "$SESSION_FILE" > "${SESSION_FILE}.tmp" && mv "${SESSION_FILE}.tmp" "$SESSION_FILE"
+            fi
             echo "idealize: agent pane removed"
             notify_viewer_resize
         fi
