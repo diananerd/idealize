@@ -2,14 +2,9 @@
 
 A terminal IDE companion for AI coding agents. Watch your agent work in real time — file tree and code viewer side by side in Ghostty.
 
-```
-┌──────────┬─────────────────────────────────────┐
-│          │                                     │
-│  tree    │         code viewer                 │
-│  (broot) │         (bat / glow)                │
-│          │                                     │
-└──────────┴─────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/assets/idealyze-demo.gif" alt="Idealize demo" width="800">
+</p>
 
 When your AI agent reads a file, the viewer shows it with syntax highlighting. When it edits a line, the viewer scrolls to the exact line and highlights the change. The file tree tracks which file is active. All of this happens automatically — you just watch.
 
